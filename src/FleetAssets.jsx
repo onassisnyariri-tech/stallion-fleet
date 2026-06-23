@@ -90,22 +90,30 @@ export default function FleetAssets({ companyId }) {
       setAssets([]);
     }
   };
-// // 🚀 NEW: INDEPENDENT ODOMETER UPDATE (Corrected Column Name)
+//// 🚀 FIXED: INDEPENDENT ODOMETER UPDATE
   const handleQuickOdometerUpdate = async (vehicleId, newOdometerValue) => {
     if (!newOdometerValue) return;
 
-    // 1. Optimistic UI Update (Instantly changes on screen)
+    const numericOdo = parseFloat(newOdometerValue);
+
+    // 1. Optimistic UI Update (Updates the background fleet array)
     setAssets(prevAssets => 
       prevAssets.map(v => 
-        v.id === vehicleId ? { ...v, current_odo: newOdometerValue } : v
+        v.id === vehicleId ? { ...v, total_mileage: numericOdo } : v
       )
     );
 
-    // 2. Background Database Update
+    // 2. Optimistic UI Update (Updates the actively selected truck)
+    if (selectedAsset && selectedAsset.id === vehicleId) {
+      setSelectedAsset(prev => ({ ...prev, total_mileage: numericOdo }));
+    }
+
+    // 3. Background Database Update
     const { error } = await supabase
       .from('vehicles')
-      .update({ current_odo: newOdometerValue }) // 🚀 EXACT MATCH NOW!
-      .eq('id', vehicleId);
+      .update({ total_mileage: numericOdo }) // 🚀 FIXED: Matches the rest of your app!
+      .eq('id', vehicleId)
+      .eq('company_id', companyId); // 🚀 SECURED: Added the SaaS Lock
 
     if (error) {
       alert("Failed to update odometer: " + error.message);
