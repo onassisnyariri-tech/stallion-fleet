@@ -206,8 +206,6 @@ export default function FleetAssets({ companyId }) {
   const startHook = () => {
     const trailers = assets.filter(a => a.asset_type === 'Trailer');
     setAvailableTrailers(trailers);
-    // 🚀 NEW: Wipe the slate clean every time you click "Hook Trailer"
-    setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
     setIsHooking(true);
   };
 
@@ -741,47 +739,53 @@ const executeCloseTrip = async () => {
                   {isHooking && (
                     <div className="space-y-4">
                       <div className="flex bg-gray-900 p-1 rounded-xl border border-gray-700">
-                        {/* 🚀 FIXED: Clears the 2nd trailer if they switch back to Single */}
-                        <button onClick={() => setHookData({...hookData, isSuperlink: false, trailer2Id: ''})} className={`flex-1 py-3 text-sm font-black uppercase rounded-lg ${!hookData.isSuperlink ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'}`}>Single Trailer</button>
+                        <button onClick={() => setHookData({...hookData, isSuperlink: false})} className={`flex-1 py-3 text-sm font-black uppercase rounded-lg ${!hookData.isSuperlink ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'}`}>Single Trailer</button>
                         <button onClick={() => setHookData({...hookData, isSuperlink: true})} className={`flex-1 py-3 text-sm font-black uppercase rounded-lg ${hookData.isSuperlink ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'}`}>Superlink (2)</button>
                       </div>
 
-                      {/* 🚀 FRONT TRAILER */}
-                      <select 
-                        value={hookData.trailerId} 
-                        onChange={(e) => setHookData({...hookData, trailerId: e.target.value})} 
-                        className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-bold text-white focus:border-indigo-500"
-                      >
-                        <option value="" disabled>{hookData.isSuperlink ? 'Select Front Link...' : 'Select Trailer...'}</option>
-                        {hookableTrailers.map(t => <option key={t.id} value={t.id}>{t.fleet_number}</option>)}
-                      </select>
+                      <select onChange={(e) => setHookData({...hookData, trailer2Id: e.target.value})}>
+  {hookableTrailers
+    .filter(t => String(t.id) !== String(hookData.trailerId)) // 🚀 THIS IS THE VISUAL FIX
+    .map(t => (
+      <option key={t.id} value={t.id}>{t.fleet_number}</option>
+  ))}
+</select>
 
-                      {/* 🚀 REAR TRAILER (ONLY SHOWS IF SUPERLINK) */}
                       {hookData.isSuperlink && (
-                        <select 
-                          value={hookData.trailer2Id} 
-                          onChange={(e) => setHookData({...hookData, trailer2Id: e.target.value})} 
-                          className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-bold text-white focus:border-indigo-500"
-                        >
-                          <option value="" disabled>Select Rear Trailer...</option>
-                          {/* 🚀 VISUAL FILTER: Physically hides the front trailer from this list */}
-                          {hookableTrailers
-                            .filter(t => String(t.id) !== String(hookData.trailerId))
-                            .map(t => <option key={t.id} value={t.id}>{t.fleet_number}</option>)}
+                        <select onChange={(e) => setHookData({...hookData, trailer2Id: e.target.value})} className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-bold text-white focus:border-indigo-500">
+                          <option value="">Select Rear Trailer...</option>
+{hookableTrailers.filter(t => t.id !== hookData.trailerId).map(t => <option key={t.id} value={t.id}>{t.fleet_number}</option>)}
                         </select>
                       )}
 
-                      <input type="number" placeholder="Dash Odometer (km)" value={hookData.odometer} onChange={(e) => setHookData({...hookData, odometer: e.target.value})} className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-xl font-black text-white focus:border-indigo-500" />
+                      <input type="number" placeholder="Dash Odometer (km)" onChange={(e) => setHookData({...hookData, odometer: e.target.value})} className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-xl font-black text-white focus:border-indigo-500" />
                       
                       <div className="flex gap-2 pt-2 border-t border-gray-700">
-                        <button onClick={() => {
-                          setIsHooking(false);
-                          setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
-                        }} className="flex-1 bg-gray-700 py-3 rounded-xl font-black text-white">CANCEL</button>
+                        <button onClick={() => setIsHooking(false)} className="flex-1 bg-gray-700 py-3 rounded-xl font-black text-white">CANCEL</button>
                         <button onClick={executeHook} className="flex-2 bg-indigo-600 py-3 rounded-xl font-black text-white active:scale-[0.98]">LOCK KINGPIN</button>
                       </div>
                     </div>
                   )}
+
+                  {selectedAsset.hooked_trailer_id && !isDropping && !isClosingTrip && (
+  <div className="bg-green-900/20 border border-green-500/30 p-4 rounded-xl flex flex-col items-center gap-3">
+    <span className="text-green-400 font-black tracking-widest uppercase text-center">
+      PULLING: {assets.find(a => a.id === selectedAsset.hooked_trailer_id)?.fleet_number}
+      {selectedAsset.hooked_trailer_2_id && ` & ${assets.find(a => a.id === selectedAsset.hooked_trailer_2_id)?.fleet_number}`}
+    </span>
+    <span className="text-gray-400 text-sm">Last Trip Start: {selectedAsset.hook_odometer} km</span>
+    
+    {/* TWO OPTIONS: Keep Hooked vs Drop */}
+    <div className="grid grid-cols-2 gap-2 w-full mt-2">
+      <button onClick={() => setIsClosingTrip(true)} className="py-3 bg-indigo-600/20 border border-indigo-500/50 hover:bg-indigo-600 text-indigo-100 rounded-xl font-black text-xs md:text-sm uppercase tracking-widest shadow-lg transition-colors active:scale-[0.98]">
+        LOG ROUND TRIP
+      </button>
+      <button onClick={() => setIsDropping(true)} className="py-3 bg-red-600/20 border border-red-500/50 hover:bg-red-600 text-red-100 rounded-xl font-black text-xs md:text-sm uppercase tracking-widest shadow-lg transition-colors active:scale-[0.98]">
+        DROP TRAILER
+      </button>
+    </div>
+  </div>
+)}
 
                   {isDropping && (
   <div className="space-y-4 mt-4 border-t border-gray-700 pt-4 animate-fade-in">
