@@ -210,13 +210,19 @@ export default function FleetAssets({ companyId }) {
   };
 
   const executeHook = async () => {
-    // Basic validation
-    if (!hookData.trailerId || !hookData.odometer) return alert("Select a trailer and enter Odometer.");
-    if (hookData.isSuperlink && !hookData.trailer2Id) return alert("Please select the Rear Trailer for the Superlink.");
+    // 🚀 FIXED: Robust validation that handles '0' and empty inputs correctly
+    const trailerSelected = hookData.trailerId && hookData.trailerId !== '';
+    const odoEntered = hookData.odometer !== '' && hookData.odometer !== null && hookData.odometer !== undefined;
+    
+    if (!trailerSelected || !odoEntered) {
+      return alert("Wait! Please make sure you have selected a trailer and entered the Odometer.");
+    }
 
-    // 🚀 NEW: THE CLONE BLOCKER
-    // This ensures that even if a user somehow finds a way to select the same trailer twice,
-    // the code will physically refuse to process the save.
+    if (hookData.isSuperlink && !hookData.trailer2Id) {
+      return alert("Please select the Rear Trailer for the Superlink.");
+    }
+
+    // 🚀 THE CLONE BLOCKER
     if (hookData.isSuperlink && String(hookData.trailerId) === String(hookData.trailer2Id)) {
       return alert("SECURITY BLOCK: You cannot hook the same trailer to both the front and rear positions!");
     }
@@ -226,10 +232,11 @@ export default function FleetAssets({ companyId }) {
       hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
       hook_odometer: parseFloat(hookData.odometer),
       total_mileage: parseFloat(hookData.odometer) 
-    }).eq('id', selectedAsset.id).eq('company_id', companyId); // SaaS Lock
+    }).eq('id', selectedAsset.id).eq('company_id', companyId);
 
     if (error) return alert(`DATABASE ERROR: Could not save hook. \n\nDetails: ${error.message}`);
 
+    // SUCCESS
     setIsHooking(false);
     setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
     await fetchFleet();
@@ -241,7 +248,7 @@ export default function FleetAssets({ companyId }) {
       hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
       hook_odometer: hookData.odometer
     });
-    setWalkaroundOdo(hookData.odometer); 
+    setWalkaroundOdo(hookData.odometer.toString()); 
   };
 
   const executeDrop = async () => {
@@ -738,30 +745,57 @@ const executeCloseTrip = async () => {
                   
                   {isHooking && (
                     <div className="space-y-4">
+                      {/* 🚀 FIXED: Aggressively reset trailer IDs when switching modes */}
                       <div className="flex bg-gray-900 p-1 rounded-xl border border-gray-700">
-                        <button onClick={() => setHookData({...hookData, isSuperlink: false})} className={`flex-1 py-3 text-sm font-black uppercase rounded-lg ${!hookData.isSuperlink ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'}`}>Single Trailer</button>
-                        <button onClick={() => setHookData({...hookData, isSuperlink: true})} className={`flex-1 py-3 text-sm font-black uppercase rounded-lg ${hookData.isSuperlink ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'}`}>Superlink (2)</button>
+                        <button 
+                          onClick={() => setHookData({ ...hookData, trailerId: '', trailer2Id: '', isSuperlink: false })} 
+                          className={`flex-1 py-3 text-sm font-black uppercase rounded-lg ${!hookData.isSuperlink ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'}`}
+                        >
+                          Single Trailer
+                        </button>
+                        <button 
+                          onClick={() => setHookData({ ...hookData, trailerId: '', trailer2Id: '', isSuperlink: true })} 
+                          className={`flex-1 py-3 text-sm font-black uppercase rounded-lg ${hookData.isSuperlink ? 'bg-indigo-600 text-white' : 'text-gray-500 hover:bg-gray-800'}`}
+                        >
+                          Superlink (2)
+                        </button>
                       </div>
 
-                      <select onChange={(e) => setHookData({...hookData, trailer2Id: e.target.value})}>
-  {hookableTrailers
-    .filter(t => String(t.id) !== String(hookData.trailerId)) // 🚀 THIS IS THE VISUAL FIX
-    .map(t => (
-      <option key={t.id} value={t.id}>{t.fleet_number}</option>
-  ))}
-</select>
+                      {/* FRONT TRAILER SELECT */}
+                      <label className="block text-xs font-bold text-gray-500 uppercase">Front Trailer</label>
+                      <select 
+                        value={hookData.trailerId} 
+                        onChange={(e) => setHookData({...hookData, trailerId: e.target.value})} 
+                        className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-bold text-white focus:border-indigo-500"
+                      >
+                        <option value="">Select Front Trailer...</option>
+                        {hookableTrailers.map(t => <option key={t.id} value={t.id}>{t.fleet_number}</option>)}
+                      </select>
 
+                      {/* REAR TRAILER SELECT (Only for Superlink) */}
                       {hookData.isSuperlink && (
-                        <select onChange={(e) => setHookData({...hookData, trailer2Id: e.target.value})} className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-bold text-white focus:border-indigo-500">
-                          <option value="">Select Rear Trailer...</option>
-{hookableTrailers.filter(t => t.id !== hookData.trailerId).map(t => <option key={t.id} value={t.id}>{t.fleet_number}</option>)}
-                        </select>
+                        <>
+                          <label className="block text-xs font-bold text-gray-500 uppercase">Rear Trailer</label>
+                          <select 
+                            value={hookData.trailer2Id} 
+                            onChange={(e) => setHookData({...hookData, trailer2Id: e.target.value})} 
+                            className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-bold text-white focus:border-indigo-500"
+                          >
+                            <option value="">Select Rear Trailer...</option>
+                            {hookableTrailers
+                              .filter(t => String(t.id) !== String(hookData.trailerId))
+                              .map(t => <option key={t.id} value={t.id}>{t.fleet_number}</option>)}
+                          </select>
+                        </>
                       )}
 
-                      <input type="number" placeholder="Dash Odometer (km)" onChange={(e) => setHookData({...hookData, odometer: e.target.value})} className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-xl font-black text-white focus:border-indigo-500" />
+                      <input type="number" placeholder="Dash Odometer (km)" value={hookData.odometer} onChange={(e) => setHookData({...hookData, odometer: e.target.value})} className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-xl font-black text-white focus:border-indigo-500" />
                       
                       <div className="flex gap-2 pt-2 border-t border-gray-700">
-                        <button onClick={() => setIsHooking(false)} className="flex-1 bg-gray-700 py-3 rounded-xl font-black text-white">CANCEL</button>
+                        <button onClick={() => {
+                          setIsHooking(false);
+                          setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
+                        }} className="flex-1 bg-gray-700 py-3 rounded-xl font-black text-white">CANCEL</button>
                         <button onClick={executeHook} className="flex-2 bg-indigo-600 py-3 rounded-xl font-black text-white active:scale-[0.98]">LOCK KINGPIN</button>
                       </div>
                     </div>
