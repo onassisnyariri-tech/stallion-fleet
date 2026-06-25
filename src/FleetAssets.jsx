@@ -421,22 +421,29 @@ const executeCloseTrip = async () => {
       return alert(`Please enter the Current Dash Odometer at the top of the screen before logging inspections.`);
     }
 
-    const odoToLog = walkaroundOdo ? parseFloat(walkaroundOdo) : 0;
+    // 🚀 NEW: Detect if the tyre is just sitting on the carrier
+    const isSpare = tyre.position && tyre.position.toLowerCase().includes('spare');
+    
+    // Odo to log to the TYRE (null if it's a spare, so it doesn't accumulate rolling mileage)
+    const tyreOdoToLog = (walkaroundOdo && !isSpare) ? parseFloat(walkaroundOdo) : null;
+    
+    // Odo to log to the VEHICLE (always updates the vehicle if entered)
+    const vehicleOdoToLog = walkaroundOdo ? parseFloat(walkaroundOdo) : 0;
 
     const { error: logError } = await supabase.from('tyre_inspections').insert([{
-      company_id: companyId, // SaaS Lock
+      company_id: companyId, 
       tyre_id: tyre.id,
       inspection_date: inspectionDate,
       tread_depth: parseFloat(finalTread),
       psi: finalPsi ? parseFloat(finalPsi) : null,
-      odometer: odoToLog 
+      odometer: tyreOdoToLog 
     }]);
 
     const { error: historyError } = await supabase.from('tyre_history').insert([{
-      company_id: companyId, // SaaS Lock
+      company_id: companyId, 
       tyre_id: tyre.id,
       action: 'INSPECTED',
-      details: `Yard Walkaround Logged. Odo: ${odoToLog}km`,
+      details: isSpare ? `Walkaround Logged (Carrier Spare)` : `Yard Walkaround Logged. Odo: ${tyreOdoToLog}km`,
       logged_tread: parseFloat(finalTread),
       logged_psi: finalPsi ? parseFloat(finalPsi) : null
     }]);
@@ -444,13 +451,13 @@ const executeCloseTrip = async () => {
     const { error: tyreError } = await supabase.from('tyres').update({
       tread_depth: parseFloat(finalTread),
       current_psi: finalPsi ? parseFloat(finalPsi) : null
-    }).eq('id', tyre.id).eq('company_id', companyId); // SaaS Lock
+    }).eq('id', tyre.id).eq('company_id', companyId); 
 
     let vehicleError = null;
     if (selectedAsset.asset_type === 'Power Unit') {
       const { error } = await supabase.from('vehicles').update({
-        total_mileage: odoToLog
-      }).eq('id', selectedAsset.id).eq('company_id', companyId); // SaaS Lock
+        total_mileage: vehicleOdoToLog
+      }).eq('id', selectedAsset.id).eq('company_id', companyId); 
       vehicleError = error;
     }
 
@@ -472,7 +479,7 @@ const executeCloseTrip = async () => {
     setTimeout(() => setLoggedStatus(prev => prev.filter(id => id !== tyre.id)), 2000);
     
     if (selectedAsset.asset_type === 'Power Unit') {
-      setSelectedAsset({...selectedAsset, total_mileage: odoToLog});
+      setSelectedAsset({...selectedAsset, total_mileage: vehicleOdoToLog});
     }
   };
 
@@ -952,7 +959,9 @@ const executeCloseTrip = async () => {
                               <div key={log.id || i} className="flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700">
                                 <div className="flex flex-col">
                                   <span className="text-indigo-400 font-bold text-sm">{log.inspection_date}</span>
-                                  <span className="text-gray-500 text-xs font-bold uppercase">{log.odometer ? `${Number(log.odometer).toLocaleString()} km` : 'No Odo'}</span>
+                                  <span className="text-gray-500 text-xs font-bold uppercase">
+  {log.odometer ? `${Number(log.odometer).toLocaleString()} km` : (t.position && t.position.toLowerCase().includes('spare') ? 'Carrier Spare' : 'No Odo')}
+</span>
                                 </div>
                                 <div className="flex gap-4 text-right">
                                   <div className="flex flex-col items-center">
