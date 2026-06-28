@@ -29,6 +29,11 @@ export default function TyreDashboard({ companyId }) {
   const [scrapTyreTarget, setScrapTyreTarget] = useState(null);
   const [scrapReason, setScrapReason] = useState('');
 
+  // 🚀 NEW: Recap Receive State
+  const [receiveRecapTarget, setReceiveRecapTarget] = useState(null);
+  const [recapCost, setRecapCost] = useState('');
+  const [recapTread, setRecapTread] = useState('20.0');
+
   const [selectedPowerUnit, setSelectedPowerUnit] = useState(null);
   const [mountingSlot, setMountingSlot] = useState(null); 
   const [inspectingTyre, setInspectingTyre] = useState(null);
@@ -219,6 +224,44 @@ export default function TyreDashboard({ companyId }) {
     fetchData(); 
   };
 
+  const executeReceiveRecap = async () => {
+    if (!recapCost || !recapTread) return alert("Please provide both the invoice cost and new tread depth.");
+
+    const numCost = parseFloat(recapCost) || 0;
+    const numTread = parseFloat(recapTread) || 0;
+
+    const { error: tyreError } = await supabase.from('tyres').update({
+      status: 'ON HAND',
+      tread_depth: numTread,
+      original_tread: numTread, 
+      repair_cost: (receiveRecapTarget.repair_cost || 0) + numCost,
+      retread_count: (receiveRecapTarget.retread_count || 0) + 1,
+      position: null,
+      vehicle_id: null
+    }).eq('id', receiveRecapTarget.id).eq('company_id', companyId);
+
+    if (tyreError) return alert("Database Error: " + tyreError.message);
+
+    await logTyreHistory(
+      receiveRecapTarget.id,
+      'RECEIVED_RECAP',
+      `Returned from Retreader. Cost: R ${numCost.toFixed(2)}. New Tread: ${numTread}mm`,
+      numTread
+    );
+
+    await supabase.from('trips').insert([{
+      company_id: companyId,
+      trip_ref: `RECAP-INV-${receiveRecapTarget.serial_number}-${new Date().toISOString().split('T')[0]}`,
+      cost_tyres: numCost,
+      distance_km: 0
+    }]);
+
+    setReceiveRecapTarget(null);
+    setRecapCost('');
+    setRecapTread('20.0');
+    fetchData();
+  };
+
   const handleSaveHistoryEdit = async () => {
     const { error } = await supabase.from('tyre_history').update({
       logged_tread: parseFloat(historyEditForm.logged_tread) || null,
@@ -275,6 +318,13 @@ export default function TyreDashboard({ companyId }) {
     if (safeStatus === 'SCRAPPED') {
       setScrapTyreTarget({ tyre, fromInspectPanel: false });
       return; 
+    }
+
+    if ((tyre.status || 'ACTIVE').toUpperCase() === 'RECAP' && safeStatus === 'ON HAND') {
+      setReceiveRecapTarget(tyre);
+      setRecapCost('');
+      setRecapTread('20.0');
+      return;
     }
 
     const isConfirmed = window.confirm(`Move tyre ${tyre.serial_number} to ${safeStatus}?`);
@@ -971,6 +1021,55 @@ export default function TyreDashboard({ companyId }) {
                 <button onClick={() => setEditingHistoryLog(null)} className="px-4 py-2 text-gray-500 font-bold text-sm hover:bg-gray-100 rounded transition-colors">Cancel</button>
                 <button onClick={handleSaveHistoryEdit} className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded shadow-md transition-colors">Save Updates</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 NEW: RECEIVE RECAP MODAL */}
+      {receiveRecapTarget && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-90 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-purple-500">
+            <div className="bg-purple-600 p-4 flex justify-between items-center">
+              <h3 className="text-white font-black tracking-widest uppercase text-sm flex items-center gap-2">
+                ♻️ Receive Recap
+              </h3>
+              <button onClick={() => setReceiveRecapTarget(null)} className="text-purple-200 hover:text-white font-bold text-xl leading-none">✕</button>
+            </div>
+            
+            <div className="p-6 bg-purple-50/30 space-y-4">
+              <p className="text-sm font-bold text-gray-700">
+                Log the retreading invoice cost and confirm the new tread depth to reset casing <span className="font-black text-purple-700">{receiveRecapTarget.serial_number}</span>'s lifecycle.
+              </p>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-black text-purple-800 uppercase tracking-widest mb-1">Recap Cost (R) *</label>
+                  <input 
+                    type="number" 
+                    placeholder="e.g. 2500"
+                    value={recapCost} 
+                    onChange={e => setRecapCost(e.target.value)} 
+                    className="w-full p-3 border-2 border-purple-200 rounded-lg focus:border-purple-500 outline-none text-sm font-black text-gray-800 shadow-inner bg-white" 
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-black text-purple-800 uppercase tracking-widest mb-1">New Tread (mm) *</label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={recapTread} 
+                    onChange={e => setRecapTread(e.target.value)} 
+                    className="w-full p-3 border-2 border-purple-200 rounded-lg focus:border-purple-500 outline-none text-sm font-black text-gray-800 shadow-inner bg-white" 
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setReceiveRecapTarget(null)} className="px-4 py-2 text-gray-500 font-bold text-sm hover:bg-gray-200 rounded transition-colors">Cancel</button>
+              <button onClick={executeReceiveRecap} className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-black text-sm rounded shadow-md transition-colors active:scale-95 uppercase tracking-widest">
+                Save & Return
+              </button>
             </div>
           </div>
         </div>
