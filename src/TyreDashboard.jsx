@@ -29,10 +29,14 @@ export default function TyreDashboard({ companyId }) {
   const [scrapTyreTarget, setScrapTyreTarget] = useState(null);
   const [scrapReason, setScrapReason] = useState('');
 
-  // 🚀 NEW: Recap Receive State
   const [receiveRecapTarget, setReceiveRecapTarget] = useState(null);
   const [recapCost, setRecapCost] = useState('');
   const [recapTread, setRecapTread] = useState('20.0');
+
+  // 🚀 NEW: Finalize Sale State
+  const [finalizeSaleTarget, setFinalizeSaleTarget] = useState(null);
+  const [salePrice, setSalePrice] = useState('');
+  const [buyerName, setBuyerName] = useState('');
 
   const [selectedPowerUnit, setSelectedPowerUnit] = useState(null);
   const [mountingSlot, setMountingSlot] = useState(null); 
@@ -262,6 +266,44 @@ export default function TyreDashboard({ companyId }) {
     fetchData();
   };
 
+  // 🚀 NEW: Execute Finalize Sale
+  const executeFinalizeSale = async () => {
+    if (!salePrice) return alert("Please provide the sale price.");
+
+    const numPrice = parseFloat(salePrice) || 0;
+    const buyerStr = buyerName.trim() || 'Unknown Buyer';
+
+    // 1. Update the tyre to DISPATCHED
+    const { error: tyreError } = await supabase.from('tyres').update({
+      status: 'DISPATCHED',
+      position: null,
+      vehicle_id: null
+    }).eq('id', finalizeSaleTarget.id).eq('company_id', companyId);
+
+    if (tyreError) return alert("Database Error: " + tyreError.message);
+
+    // 2. Log to history
+    await logTyreHistory(
+      finalizeSaleTarget.id,
+      'DISPATCHED',
+      `Casing sold to ${buyerStr} for R ${numPrice.toFixed(2)}. Left the yard.`,
+      finalizeSaleTarget.tread_depth
+    );
+
+    // 3. Financial ledger hit (NEGATIVE COST = REVENUE)
+    await supabase.from('trips').insert([{
+      company_id: companyId,
+      trip_ref: `SALE-REV-${finalizeSaleTarget.serial_number}-${new Date().toISOString().split('T')[0]}`,
+      cost_tyres: -numPrice, // Reduces overall fleet CPK!
+      distance_km: 0
+    }]);
+
+    setFinalizeSaleTarget(null);
+    setSalePrice('');
+    setBuyerName('');
+    fetchData();
+  };
+
   const handleSaveHistoryEdit = async () => {
     const { error } = await supabase.from('tyre_history').update({
       logged_tread: parseFloat(historyEditForm.logged_tread) || null,
@@ -479,7 +521,7 @@ export default function TyreDashboard({ companyId }) {
         
         {activeSubTab === 'inventory' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
               <button type="button" onClick={() => setInventoryFilter('ACTIVE')} className={`text-left w-full cursor-pointer bg-white p-3 md:p-4 rounded shadow-sm border-t-4 border-green-500 transition-all ${inventoryFilter === 'ACTIVE' ? 'ring-2 ring-green-500 bg-green-50 scale-[1.02]' : 'hover:bg-gray-50'}`}>
                 <span className="block text-[10px] md:text-xs font-bold text-gray-500 uppercase">Active</span>
                 <span className="block text-xl md:text-2xl font-black text-green-600">{tyres.filter(t => (t.status || 'ACTIVE') === 'ACTIVE').length}</span>
@@ -495,6 +537,10 @@ export default function TyreDashboard({ companyId }) {
               <button type="button" onClick={() => setInventoryFilter('SOLD')} className={`text-left w-full cursor-pointer bg-white p-3 md:p-4 rounded shadow-sm border-t-4 border-gray-800 transition-all ${inventoryFilter === 'SOLD' ? 'ring-2 ring-gray-800 bg-gray-100 scale-[1.02]' : 'hover:bg-gray-50'}`}>
                 <span className="block text-[10px] md:text-xs font-bold text-gray-500 uppercase">Casings to Sell</span>
                 <span className="block text-xl md:text-2xl font-black">{tyres.filter(t => t.status === 'SOLD').length}</span>
+              </button>
+              <button type="button" onClick={() => setInventoryFilter('DISPATCHED')} className={`text-left w-full cursor-pointer bg-white p-3 md:p-4 rounded shadow-sm border-t-4 border-teal-500 transition-all ${inventoryFilter === 'DISPATCHED' ? 'ring-2 ring-teal-500 bg-teal-50 scale-[1.02]' : 'hover:bg-gray-50'}`}>
+                <span className="block text-[10px] md:text-xs font-bold text-gray-500 uppercase">Dispatched</span>
+                <span className="block text-xl md:text-2xl font-black">{tyres.filter(t => t.status === 'DISPATCHED').length}</span>
               </button>
               <button type="button" onClick={() => setInventoryFilter('SCRAPPED')} className={`text-left w-full cursor-pointer bg-white p-3 md:p-4 rounded shadow-sm border-t-4 border-red-500 transition-all ${inventoryFilter === 'SCRAPPED' ? 'ring-2 ring-red-500 bg-red-50 scale-[1.02]' : 'hover:bg-gray-50'}`}>
                 <span className="block text-[10px] md:text-xs font-bold text-gray-500 uppercase">Scrapped</span>
@@ -539,7 +585,7 @@ export default function TyreDashboard({ companyId }) {
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h3 className="font-bold text-gray-800">
+                <h3 className="font-bold text-gray-800 uppercase tracking-widest text-sm">
                   Ledger: {inventoryFilter === 'ON HAND' ? 'YARD / ON HAND' : inventoryFilter === 'SOLD' ? 'CASINGS TO SELL' : inventoryFilter} TYRES
                 </h3>
                 <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -562,36 +608,57 @@ export default function TyreDashboard({ companyId }) {
                     {filteredInventoryTyres.length === 0 ? (
                       <tr><td colSpan="6" className="p-10 text-center text-gray-500 font-bold italic">No tyres found in {inventoryFilter} status.</td></tr>
                     ) : (
-                      filteredInventoryTyres.map(tyre => (
-                        <tr key={tyre.id} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="p-3 md:p-4">
-                            <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{tyre.brand || 'No Brand'}</span>
-                            <span className="block font-black text-gray-800 text-lg leading-none mb-1">{tyre.serial_number}</span>
-                            <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${tyre.status === 'ACTIVE' || !tyre.status ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>{tyre.status || 'ACTIVE'}</span>
-                          </td>
-                          <td className="p-3 md:p-4 font-bold text-gray-700">R {tyre.totalCost?.toFixed(2)}</td>
-                          <td className="p-3 md:p-4 font-bold">{tyre.tread_depth} mm</td>
-                          <td className="p-3 md:p-4 text-sm text-gray-600">{tyre.virtual_mileage.toLocaleString()} km</td>
-                          <td className="p-3 md:p-4 text-sm font-black text-indigo-600">{tyre.cpk > 0 ? `R ${tyre.cpk}` : '-'}</td>
-                          
-                          <td className="p-3 md:p-4 text-center whitespace-nowrap flex items-center justify-center gap-2 mt-2">
-                            <button type="button" onClick={() => handleViewHistory(tyre)} className="text-[10px] md:text-xs bg-gray-800 text-white px-3 py-1.5 rounded font-bold hover:bg-black transition-colors">History</button>
+                      filteredInventoryTyres.map(tyre => {
+                        // 🚀 NEW: Find the vehicle this tyre is mounted to
+                        const assignedVehicle = tyre.vehicle_id ? vehicles.find(v => String(v.id) === String(tyre.vehicle_id)) : null;
+
+                        return (
+                          <tr key={tyre.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="p-3 md:p-4">
+                              <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{tyre.brand || 'No Brand'}</span>
+                              <span className="block font-black text-gray-800 text-lg leading-none mb-1">{tyre.serial_number}</span>
+                              
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${tyre.status === 'ACTIVE' || !tyre.status ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
+                                  {tyre.status || 'ACTIVE'}
+                                </span>
+                                
+                                {/* 🚀 NEW: Render the Fleet Number and Position badge if it is Active and Assigned */}
+                                {((tyre.status === 'ACTIVE' || !tyre.status) && assignedVehicle && tyre.position) && (
+                                  <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 tracking-wider">
+                                    🚚 {assignedVehicle.fleet_number} <span className="text-indigo-300 mx-1">|</span> {tyre.position}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3 md:p-4 font-bold text-gray-700">R {tyre.totalCost?.toFixed(2)}</td>
+                            <td className="p-3 md:p-4 font-bold">{tyre.tread_depth} mm</td>
+                            <td className="p-3 md:p-4 text-sm text-gray-600">{tyre.virtual_mileage.toLocaleString()} km</td>
+                            <td className="p-3 md:p-4 text-sm font-black text-indigo-600">{tyre.cpk > 0 ? `R ${tyre.cpk}` : '-'}</td>
                             
-                            <button type="button" onClick={() => openEditModal(tyre)} className="text-[10px] md:text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded font-bold hover:bg-indigo-100 transition-colors">Edit</button>
-                            
-                            <select 
-                              onChange={(e) => handleQuickMove(tyre, e.target.value)} 
-                              value="" 
-                              className="text-[10px] md:text-xs bg-white border border-gray-300 text-gray-700 px-2 py-1.5 rounded font-bold outline-none cursor-pointer hover:bg-gray-50 shadow-sm"
-                            >
-                              <option value="" disabled>Move To...</option>
-                              {['ON HAND', 'REPAIR', 'RECAP', 'SOLD', 'SCRAPPED'].filter(s => s !== (tyre.status || 'ACTIVE')).map(s => (
-                                <option key={s} value={s}>{s}</option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      ))
+                            <td className="p-3 md:p-4 text-center whitespace-nowrap flex items-center justify-center gap-2 mt-2">
+                              {inventoryFilter === 'SOLD' && (
+                                <button type="button" onClick={() => setFinalizeSaleTarget(tyre)} className="text-[10px] md:text-xs bg-green-600 text-white px-3 py-1.5 rounded font-bold hover:bg-green-700 transition-colors uppercase tracking-widest">Dispatch</button>
+                              )}
+                              
+                              <button type="button" onClick={() => handleViewHistory(tyre)} className="text-[10px] md:text-xs bg-gray-800 text-white px-3 py-1.5 rounded font-bold hover:bg-black transition-colors">History</button>
+                              
+                              <button type="button" onClick={() => openEditModal(tyre)} className="text-[10px] md:text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded font-bold hover:bg-indigo-100 transition-colors">Edit</button>
+                              
+                              <select 
+                                onChange={(e) => handleQuickMove(tyre, e.target.value)} 
+                                value="" 
+                                className="text-[10px] md:text-xs bg-white border border-gray-300 text-gray-700 px-2 py-1.5 rounded font-bold outline-none cursor-pointer hover:bg-gray-50 shadow-sm"
+                              >
+                                <option value="" disabled>Move To...</option>
+                                {['ON HAND', 'REPAIR', 'RECAP', 'SOLD', 'SCRAPPED'].filter(s => s !== (tyre.status || 'ACTIVE')).map(s => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -803,22 +870,24 @@ export default function TyreDashboard({ companyId }) {
         )}
       </div>
 
+      {/* 🚀 UPDATED: Mounting Panel with Brand and SN */}
       {mountingSlot && (
         <div className="fixed top-0 right-0 w-full sm:w-80 h-full bg-white shadow-2xl border-l border-gray-200 p-6 z-50 flex flex-col transform transition-transform translate-x-0">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-black text-gray-800">Mount to {mountingSlot.position}</h3>
-            <button type="button" onClick={() => setMountingSlot(null)} className="text-gray-400 hover:text-black font-bold text-xl">X</button>
+            <button type="button" onClick={() => setMountingSlot(null)} className="text-gray-400 hover:text-black font-bold text-xl leading-none">✕</button>
           </div>
           <div className="flex-1 overflow-y-auto space-y-3 pr-2">
             {availableToMount.length === 0 ? (
               <p className="text-sm text-gray-500 italic">No active tyres in yard.</p>
             ) : (
               availableToMount.map(t => (
-                <button type="button" key={t.id} onClick={() => handleMountTyre(t.id)} className="w-full text-left p-3 border border-gray-200 rounded cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all focus:outline-none focus:ring-1 focus:ring-blue-500">
-                  <span className="block font-bold text-gray-800">{t.serial_number}</span>
-                  <span className="flex justify-between text-xs mt-1">
-                    <span className="text-gray-500">{t.tread_depth}mm</span>
-                    <span className="text-gray-500">{t.virtual_mileage} km</span>
+                <button type="button" key={t.id} onClick={() => handleMountTyre(t.id)} className="w-full text-left p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <span className="block text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">{t.brand || 'Unknown Brand'}</span>
+                  <span className="block font-black text-gray-900 text-lg leading-none mb-3">SN: {t.serial_number}</span>
+                  <span className="flex justify-between items-center text-xs border-t border-gray-100 pt-2">
+                    <span className="text-gray-700 font-bold bg-white px-2 py-1 rounded shadow-sm border border-gray-100">{t.tread_depth} mm</span>
+                    <span className="text-gray-500 font-medium">{t.virtual_mileage.toLocaleString()} km</span>
                   </span>
                 </button>
               ))
@@ -827,21 +896,25 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
+      {/* 🚀 UPDATED: Inspecting Panel with Brand and SN */}
       {inspectingTyre && (
         <div className="fixed top-0 left-0 w-full sm:w-80 h-full bg-white shadow-2xl border-r border-gray-200 p-6 z-50 flex flex-col transform transition-transform translate-x-0">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-black text-gray-800">{inspectingTyre.serial_number}</h3>
-            <button type="button" onClick={() => setInspectingTyre(null)} className="text-gray-400 hover:text-black font-bold text-xl">X</button>
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">{inspectingTyre.brand || 'Unknown Brand'}</p>
+              <h3 className="font-black text-2xl text-gray-900 leading-none tracking-tight">SN: {inspectingTyre.serial_number}</h3>
+            </div>
+            <button type="button" onClick={() => setInspectingTyre(null)} className="text-gray-400 hover:text-black font-bold text-xl leading-none">✕</button>
           </div>
           
-          <div className="bg-gray-50 p-4 rounded mb-6 border border-gray-200 flex flex-col gap-3">
+          <div className="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200 flex flex-col gap-3 shadow-inner">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{inspectingTyre.position}</p>
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <p className="text-3xl font-black text-gray-800">{inspectingTyre.tread_depth} <span className="text-base text-gray-500">mm</span></p>
                 {inspectingTyre.current_psi && <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">{inspectingTyre.current_psi} PSI</span>}
               </div>
-              <button type="button" onClick={() => { setInspectingTyre(null); handleViewHistory(inspectingTyre); }} className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-2 rounded hover:bg-blue-200">History</button>
+              <button type="button" onClick={() => { setInspectingTyre(null); handleViewHistory(inspectingTyre); }} className="bg-white border border-gray-200 text-gray-700 text-xs font-bold px-3 py-2 rounded shadow-sm hover:bg-gray-100">History</button>
             </div>
           </div>
 
@@ -849,17 +922,17 @@ export default function TyreDashboard({ companyId }) {
             <div>
               <label htmlFor="updateTread" className="block text-xs font-bold text-gray-600 mb-1">Update Tread & PSI</label>
               <div className="flex gap-2">
-                <input id="updateTread" type="number" step="0.1" value={newTread} onChange={(e) => setNewTread(e.target.value)} className="w-20 border p-2 rounded text-sm outline-none focus:border-blue-500" placeholder="mm"/>
-                <input type="number" value={newPsi} onChange={(e) => setNewPsi(e.target.value)} className="w-20 border p-2 rounded text-sm outline-none focus:border-blue-500" placeholder="PSI"/>
-                <button type="button" onClick={() => handleLogInspection(inspectingTyre.id)} disabled={!newTread} className="flex-1 bg-gray-800 text-white rounded text-sm font-bold hover:bg-black disabled:opacity-50">Log</button>
+                <input id="updateTread" type="number" step="0.1" value={newTread} onChange={(e) => setNewTread(e.target.value)} className="w-20 border p-2 rounded text-sm outline-none focus:border-indigo-500 font-bold" placeholder="mm"/>
+                <input type="number" value={newPsi} onChange={(e) => setNewPsi(e.target.value)} className="w-20 border p-2 rounded text-sm outline-none focus:border-indigo-500 font-bold" placeholder="PSI"/>
+                <button type="button" onClick={() => handleLogInspection(inspectingTyre.id)} disabled={!newTread} className="flex-1 bg-gray-900 text-white rounded text-sm font-bold hover:bg-black disabled:opacity-50 transition-colors uppercase tracking-widest">Log</button>
               </div>
             </div>
             <hr className="my-4 border-gray-200"/>
-            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'ON HAND')} className="w-full py-2.5 bg-blue-50 text-blue-700 font-bold text-sm rounded border border-blue-200 hover:bg-blue-100">Return to Yard</button>
-            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'REPAIR')} className="w-full py-2.5 bg-yellow-50 text-yellow-700 font-bold text-sm rounded border border-yellow-200 hover:bg-yellow-100">Send to Repair</button>
-            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'RECAP')} className="w-full py-2.5 bg-purple-50 text-purple-700 font-bold text-sm rounded border border-purple-200 hover:bg-purple-100">Send for Recap</button>
-            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'SOLD')} className="w-full py-2.5 bg-gray-100 text-gray-800 font-bold text-sm rounded border border-gray-300 hover:bg-gray-200">Sell Casing</button>
-            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'SCRAPPED')} className="w-full py-2.5 bg-red-50 text-red-700 font-bold text-sm rounded border border-red-200 hover:bg-red-100">Scrap Tyre</button>
+            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'ON HAND')} className="w-full py-2.5 bg-blue-50 text-blue-700 font-bold text-sm rounded border border-blue-200 hover:bg-blue-100 transition-colors">Return to Yard</button>
+            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'REPAIR')} className="w-full py-2.5 bg-yellow-50 text-yellow-700 font-bold text-sm rounded border border-yellow-200 hover:bg-yellow-100 transition-colors">Send to Repair</button>
+            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'RECAP')} className="w-full py-2.5 bg-purple-50 text-purple-700 font-bold text-sm rounded border border-purple-200 hover:bg-purple-100 transition-colors">Send for Recap</button>
+            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'SOLD')} className="w-full py-2.5 bg-gray-100 text-gray-800 font-bold text-sm rounded border border-gray-300 hover:bg-gray-200 transition-colors">Sell Casing</button>
+            <button type="button" onClick={() => handleUnmountTyre(inspectingTyre.id, 'SCRAPPED')} className="w-full py-2.5 bg-red-50 text-red-700 font-bold text-sm rounded border border-red-200 hover:bg-red-100 transition-colors">Scrap Tyre</button>
           </div>
         </div>
       )}
@@ -1069,6 +1142,55 @@ export default function TyreDashboard({ companyId }) {
               <button onClick={() => setReceiveRecapTarget(null)} className="px-4 py-2 text-gray-500 font-bold text-sm hover:bg-gray-200 rounded transition-colors">Cancel</button>
               <button onClick={executeReceiveRecap} className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-black text-sm rounded shadow-md transition-colors active:scale-95 uppercase tracking-widest">
                 Save & Return
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 NEW: FINALIZE SALE MODAL */}
+      {finalizeSaleTarget && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-90 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-green-500">
+            <div className="bg-green-600 p-4 flex justify-between items-center">
+              <h3 className="text-white font-black tracking-widest uppercase text-sm flex items-center gap-2">
+                💰 Finalize Casing Sale
+              </h3>
+              <button onClick={() => setFinalizeSaleTarget(null)} className="text-green-200 hover:text-white font-bold text-xl leading-none">✕</button>
+            </div>
+            
+            <div className="p-6 bg-green-50/30 space-y-4">
+              <p className="text-sm font-bold text-gray-700">
+                Log the final sale price for casing <span className="font-black text-green-700">{finalizeSaleTarget.serial_number}</span> to deduct it from your total fleet tyre expenses.
+              </p>
+              
+              <div>
+                <label className="block text-xs font-black text-green-800 uppercase tracking-widest mb-1">Buyer Name / Company</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. John's Retreads"
+                  value={buyerName} 
+                  onChange={e => setBuyerName(e.target.value)} 
+                  className="w-full p-3 border-2 border-green-200 rounded-lg focus:border-green-500 outline-none text-sm font-bold text-gray-800 shadow-inner bg-white" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-green-800 uppercase tracking-widest mb-1">Sale Price Received (R) *</label>
+                <input 
+                  type="number" 
+                  placeholder="e.g. 400"
+                  value={salePrice} 
+                  onChange={e => setSalePrice(e.target.value)} 
+                  className="w-full p-3 border-2 border-green-200 rounded-lg focus:border-green-500 outline-none text-sm font-black text-gray-800 shadow-inner bg-white" 
+                />
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setFinalizeSaleTarget(null)} className="px-4 py-2 text-gray-500 font-bold text-sm hover:bg-gray-200 rounded transition-colors">Cancel</button>
+              <button onClick={executeFinalizeSale} disabled={!salePrice} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-black text-sm rounded shadow-md transition-colors active:scale-95 uppercase tracking-widest disabled:opacity-50">
+                Confirm Dispatch
               </button>
             </div>
           </div>

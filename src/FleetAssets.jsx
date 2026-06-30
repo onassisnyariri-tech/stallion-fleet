@@ -916,11 +916,23 @@ const executeCloseTrip = async () => {
             </div>
 
             {displayTyres.map((t, index) => (
-  <div key={t.id} className="bg-gray-800 rounded-2xl border-2 border-gray-700 overflow-hidden shadow-xl mb-4">
-                <div className="bg-gray-900 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
-                  <span className="text-indigo-400 font-black text-xl uppercase">{t.position ? t.position : `TYRE #${index + 1}`}</span>
-                  <span className="text-gray-400 font-bold text-sm bg-gray-800 px-3 py-1 rounded-full border border-gray-700">SN: {t.serial_number}</span>
+              <div key={t.id} className="bg-gray-800 rounded-2xl border-2 border-gray-700 overflow-hidden shadow-xl mb-4">
+                
+                {/* 🚀 UPDATED: Card Header with Brand and Enhanced SN Badge */}
+                <div className="bg-gray-900 px-4 py-3 border-b border-gray-700 flex justify-between items-center gap-2">
+                  <div className="flex flex-col">
+                    <span className="text-indigo-400 font-black text-xl uppercase leading-none mb-1">
+                      {t.position ? t.position : `TYRE #${index + 1}`}
+                    </span>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                      {t.brand || 'Unknown Brand'}
+                    </span>
+                  </div>
+                  <span className="text-gray-300 font-black text-sm bg-black/40 px-3 py-1.5 rounded-lg border border-gray-600 shadow-inner whitespace-nowrap">
+                    SN: {t.serial_number}
+                  </span>
                 </div>
+                
                 <div className="p-5 space-y-5">
                   <div className="flex gap-4">
                     <div className="flex-1">
