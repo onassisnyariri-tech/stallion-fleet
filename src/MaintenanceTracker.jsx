@@ -22,10 +22,20 @@ export default function MaintenanceTracker({ companyId }) {
   const [taskIntervalDays, setTaskIntervalDays] = useState(''); 
   const [taskLastDate, setTaskLastDate] = useState(''); 
 
-  // 🚀 NEW: State for the "Log Done" Modal
+  // State for the "Log Done" Modal
   const [logDoneTarget, setLogDoneTarget] = useState(null);
   const [logDoneDate, setLogDoneDate] = useState('');
   const [logDoneOdo, setLogDoneOdo] = useState('');
+
+  // State for the Export Modal
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportMode, setExportMode] = useState('ALL'); 
+  const [exportSelectedVehicles, setExportSelectedVehicles] = useState([]);
+
+  // 🚀 NEW: State for the History Modal
+  const [historyTarget, setHistoryTarget] = useState(null);
+  const [taskHistoryLogs, setTaskHistoryLogs] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   useEffect(() => {
     if (companyId) fetchData();
@@ -87,32 +97,45 @@ export default function MaintenanceTracker({ companyId }) {
     fetchData();
   };
 
-  // 🚀 NEW: Open the Modal instead of instantly processing
   const openLogDoneModal = (task) => {
     setLogDoneTarget(task);
     if (task.tracking_type === 'DATE') {
-      setLogDoneDate(new Date().toISOString().split('T')[0]); // Default to today
+      setLogDoneDate(new Date().toISOString().split('T')[0]); 
     } else {
-      setLogDoneOdo(selectedVehicle.total_mileage || 0); // Default to current dash odo
+      setLogDoneOdo(selectedVehicle.total_mileage || 0); 
     }
   };
 
-  // 🚀 NEW: Process the Modal submission
+  // 🚀 UPDATED: Now writes to both pm_tasks and pm_history
   const executeLogDone = async () => {
     let updatePayload = {};
+    let historyPayload = {
+      company_id: companyId,
+      vehicle_id: logDoneTarget.vehicle_id,
+      task_id: logDoneTarget.id,
+      service_name: logDoneTarget.service_name,
+      category: logDoneTarget.category || 'ADMIN',
+      tracking_type: logDoneTarget.tracking_type
+    };
 
     if (logDoneTarget.tracking_type === 'DATE') {
       if (!logDoneDate) return alert("Please select a completion date.");
       updatePayload.last_service_date = logDoneDate;
+      historyPayload.completed_date = logDoneDate;
     } else {
       if (!logDoneOdo) return alert("Please enter the completion odometer.");
       updatePayload.last_service_odo = parseFloat(logDoneOdo);
+      historyPayload.completed_odo = parseFloat(logDoneOdo);
     }
 
-    const { error } = await supabase.from('pm_tasks').update(updatePayload).eq('id', logDoneTarget.id).eq('company_id', companyId);
+    // 1. Update the live dashboard snapshot
+    const { error: updateError } = await supabase.from('pm_tasks').update(updatePayload).eq('id', logDoneTarget.id).eq('company_id', companyId);
+    if (updateError) return alert(`DATABASE ERROR: Could not log service.\n\nDetails: ${updateError.message}`);
     
-    if (error) return alert(`DATABASE ERROR: Could not log service.\n\nDetails: ${error.message}`);
-    
+    // 2. Write the permanent historical ledger entry
+    const { error: historyError } = await supabase.from('pm_history').insert([historyPayload]);
+    if (historyError) console.error("Could not write to history ledger:", historyError.message);
+
     setLogDoneTarget(null);
     fetchData();
   };
@@ -124,7 +147,27 @@ export default function MaintenanceTracker({ companyId }) {
     fetchData();
   };
 
-  const getTaskUrgency = (task) => {
+  // 🚀 NEW: Load history for a specific task
+  const openHistoryModal = async (task) => {
+    setHistoryTarget(task);
+    setIsLoadingHistory(true);
+    
+    const { data, error } = await supabase
+      .from('pm_history')
+      .select('*')
+      .eq('company_id', companyId)
+      .eq('task_id', task.id)
+      .order('created_at', { ascending: false });
+
+    if (!error) {
+      setTaskHistoryLogs(data || []);
+    }
+    setIsLoadingHistory(false);
+  };
+
+  const getTaskUrgency = (task, targetVehicle = null) => {
+    const vehicleToUse = targetVehicle || selectedVehicle;
+    
     if (task.tracking_type === 'DATE') {
       const lastDate = new Date(task.last_service_date);
       const today = new Date();
@@ -138,7 +181,7 @@ export default function MaintenanceTracker({ companyId }) {
       if (diffDays <= 14) return { level: 'ACTION', days: diffDays, color: 'border-yellow-500 bg-yellow-50 text-yellow-800', bar: 'bg-yellow-500' };
       return { level: 'OK', days: diffDays, color: 'border-green-500 bg-green-50 text-green-800', bar: 'bg-green-500' };
     } else {
-      const currentOdo = selectedVehicle?.total_mileage || 0;
+      const currentOdo = vehicleToUse?.total_mileage || 0;
       const nextDue = (task.last_service_odo || 0) + (task.interval_km || 0);
       const kmRemaining = nextDue - currentOdo;
 
@@ -146,6 +189,95 @@ export default function MaintenanceTracker({ companyId }) {
       if (kmRemaining <= 500) return { level: 'ACTION', km: kmRemaining, color: 'border-yellow-500 bg-yellow-50 text-yellow-800', bar: 'bg-yellow-500' };
       return { level: 'OK', km: kmRemaining, color: 'border-green-500 bg-green-50 text-green-800', bar: 'bg-green-500' };
     }
+  };
+
+  const executeExport = () => {
+    let tasksToExport = tasks;
+
+    if (exportMode === 'SINGLE') {
+      if (exportSelectedVehicles.length === 0) return alert("Please select a unit to export.");
+      tasksToExport = tasks.filter(t => String(t.vehicle_id) === String(exportSelectedVehicles[0]));
+    } else if (exportMode === 'MULTIPLE') {
+      if (exportSelectedVehicles.length === 0) return alert("Please select at least one unit.");
+      tasksToExport = tasks.filter(t => exportSelectedVehicles.includes(String(t.vehicle_id)));
+    }
+
+    if (tasksToExport.length === 0) {
+      alert("No maintenance requirements found for the selected unit(s).");
+      return;
+    }
+
+    const headers = [
+      "Fleet Number", 
+      "Category", 
+      "Requirement Name", 
+      "Tracked By", 
+      "Interval", 
+      "Last Completed", 
+      "Next Due", 
+      "Urgency Status"
+    ];
+
+    const csvRows = tasksToExport.map(task => {
+      const vehicle = vehicles.find(v => String(v.id) === String(task.vehicle_id));
+      const fleetNum = vehicle ? vehicle.fleet_number : 'Unknown Unit';
+      const category = task.category || 'ADMIN';
+      const reqName = task.service_name || 'Unknown Requirement';
+      const tracking = task.tracking_type || 'UNKNOWN';
+      const urgency = getTaskUrgency(task, vehicle);
+      
+      let intervalStr = '';
+      let lastCompletedStr = '';
+      let nextDueStr = '';
+
+      if (tracking === 'DATE') {
+        intervalStr = `${task.interval_days} Days`;
+        lastCompletedStr = task.last_service_date || 'Never';
+        if (task.last_service_date) {
+          const nextDate = new Date(task.last_service_date);
+          nextDate.setDate(nextDate.getDate() + (task.interval_days || 0));
+          nextDueStr = nextDate.toISOString().split('T')[0];
+        } else {
+          nextDueStr = 'Unknown';
+        }
+      } else {
+        intervalStr = `${task.interval_km} km`;
+        lastCompletedStr = `${task.last_service_odo || 0} km`;
+        nextDueStr = `${(task.last_service_odo || 0) + (task.interval_km || 0)} km`;
+      }
+
+      return [
+        `"${fleetNum}"`,
+        `"${category}"`,
+        `"${reqName}"`,
+        `"${tracking}"`,
+        `"${intervalStr}"`,
+        `"${lastCompletedStr}"`,
+        `"${nextDueStr}"`,
+        `"${urgency.level}"` 
+      ].join(',');
+    });
+
+    const csvContent = "sep=,\n" + headers.join(',') + '\n' + csvRows.join('\n');
+    const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    let fileName = `Fleet_Maintenance_Log_${new Date().toISOString().split('T')[0]}.csv`;
+    if (exportMode === 'SINGLE') {
+      const v = vehicles.find(v => String(v.id) === String(exportSelectedVehicles[0]));
+      if (v) fileName = `Maintenance_${v.fleet_number}_${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (exportMode === 'MULTIPLE') {
+      fileName = `Maintenance_Custom_Selection_${new Date().toISOString().split('T')[0]}.csv`;
+    }
+
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setShowExportModal(false);
   };
 
   const vehicleTasks = tasks.filter(t => String(t.vehicle_id) === String(selectedVehicleId));
@@ -181,7 +313,12 @@ export default function MaintenanceTracker({ companyId }) {
         )}
         <div className="flex justify-between items-start mb-2 mt-1">
           <div>
-            <h4 className="font-black text-lg">{task.service_name}</h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-black text-lg">{task.service_name}</h4>
+              <button onClick={() => openHistoryModal(task)} className="text-[9px] bg-white border border-gray-300 text-gray-600 hover:bg-gray-100 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest shadow-sm">
+                History
+              </button>
+            </div>
             {isDate ? (
                <p className="text-xs opacity-80">Interval: {task.interval_days} Days | Last: {task.last_service_date}</p>
             ) : (
@@ -236,6 +373,17 @@ export default function MaintenanceTracker({ companyId }) {
           />
           <span className="absolute left-2.5 top-2 text-gray-400">🔍</span>
         </div>
+
+        <button 
+          onClick={() => {
+            setExportMode('ALL');
+            setExportSelectedVehicles([]);
+            setShowExportModal(true);
+          }}
+          className="w-full mb-3 flex items-center justify-center gap-2 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 py-2 rounded-md text-xs font-bold uppercase tracking-widest transition-colors"
+        >
+          <span className="text-sm">📊</span> Export Reports
+        </button>
 
         <div className="space-y-2 max-h-137.5 overflow-y-auto pr-1">
           {filteredVehicles.length === 0 ? (
@@ -347,7 +495,7 @@ export default function MaintenanceTracker({ companyId }) {
         )}
       </div>
 
-      {/* 🚀 NEW: LOG DONE MODAL */}
+      {/* LOG DONE MODAL */}
       {logDoneTarget && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-gray-900">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-teal-500">
@@ -361,7 +509,7 @@ export default function MaintenanceTracker({ companyId }) {
             <div className="p-6 bg-teal-50/30">
               <h4 className="font-black text-lg text-gray-800 mb-2">{logDoneTarget.service_name}</h4>
               <p className="text-sm text-gray-600 mb-4">
-                Confirm the exact {logDoneTarget.tracking_type === 'DATE' ? 'date' : 'odometer'} this requirement was fulfilled to reset the tracking interval.
+                Confirm the exact {logDoneTarget.tracking_type === 'DATE' ? 'date' : 'odometer'} this requirement was fulfilled. This will reset the tracking interval AND save a permanent record to the historical ledger.
               </p>
 
               {logDoneTarget.tracking_type === 'DATE' ? (
@@ -391,6 +539,135 @@ export default function MaintenanceTracker({ companyId }) {
               <button onClick={() => setLogDoneTarget(null)} className="px-4 py-2 text-gray-500 font-bold text-sm hover:bg-gray-200 rounded transition-colors">Cancel</button>
               <button onClick={executeLogDone} className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white font-black text-sm rounded shadow-md transition-colors active:scale-95 uppercase tracking-widest">
                 Save & Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT REPORT MODAL */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-gray-900">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border-2 border-green-500">
+            <div className="bg-green-600 p-4 flex justify-between items-center">
+              <h3 className="text-white font-black tracking-widest uppercase text-sm">
+                Generate Maintenance Report
+              </h3>
+              <button onClick={() => setShowExportModal(false)} className="text-green-200 hover:text-white font-bold text-xl leading-none">✕</button>
+            </div>
+            
+            <div className="p-6 bg-gray-50">
+              <p className="text-sm font-bold text-gray-700 mb-4">Select which assets to include in the CSV export.</p>
+              
+              <div className="flex gap-2 mb-6">
+                <button onClick={() => setExportMode('ALL')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded transition-colors border ${exportMode === 'ALL' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'}`}>All Fleet</button>
+                <button onClick={() => setExportMode('SINGLE')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded transition-colors border ${exportMode === 'SINGLE' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'}`}>Single Unit</button>
+                <button onClick={() => setExportMode('MULTIPLE')} className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded transition-colors border ${exportMode === 'MULTIPLE' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'}`}>Custom</button>
+              </div>
+
+              {exportMode === 'SINGLE' && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Select Asset</label>
+                  <select 
+                    value={exportSelectedVehicles[0] || ''} 
+                    onChange={e => setExportSelectedVehicles([e.target.value])} 
+                    className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-green-500 bg-white font-bold text-gray-800"
+                  >
+                    <option value="">Choose a unit...</option>
+                    {vehicles.map(v => <option key={v.id} value={v.id}>{v.fleet_number}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {exportMode === 'MULTIPLE' && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-black text-gray-600 uppercase tracking-widest mb-2">Select Multiple Assets</label>
+                  <div className="max-h-48 overflow-y-auto bg-white border border-gray-300 rounded-lg p-2 space-y-1 shadow-inner">
+                    {vehicles.map(v => (
+                      <label key={v.id} className="flex items-center gap-3 p-2 hover:bg-green-50 rounded cursor-pointer transition-colors border border-transparent hover:border-green-100">
+                        <input 
+                          type="checkbox" 
+                          checked={exportSelectedVehicles.includes(String(v.id))} 
+                          onChange={(e) => {
+                            const idStr = String(v.id);
+                            if (e.target.checked) {
+                              setExportSelectedVehicles([...exportSelectedVehicles, idStr]);
+                            } else {
+                              setExportSelectedVehicles(exportSelectedVehicles.filter(id => id !== idStr));
+                            }
+                          }}
+                          className="w-4 h-4 text-green-600 rounded focus:ring-green-500 cursor-pointer"
+                        />
+                        <span className="font-bold text-gray-800">{v.fleet_number}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-500 font-bold mt-2 text-right">{exportSelectedVehicles.length} units selected</p>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button onClick={() => setShowExportModal(false)} className="px-4 py-2 text-gray-500 font-bold text-sm hover:bg-gray-100 rounded transition-colors">Cancel</button>
+              <button onClick={executeExport} className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-black text-sm rounded shadow-md transition-colors active:scale-95 uppercase tracking-widest">
+                Download CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 NEW: HISTORY LEDGER MODAL */}
+      {historyTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-gray-900">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border-2 border-indigo-500 flex flex-col max-h-[80vh]">
+            <div className="bg-indigo-600 p-4 flex justify-between items-center shrink-0">
+              <h3 className="text-white font-black tracking-widest uppercase text-sm">
+                Historical Ledger
+              </h3>
+              <button onClick={() => setHistoryTarget(null)} className="text-indigo-200 hover:text-white font-bold text-xl leading-none">✕</button>
+            </div>
+            
+            <div className="p-4 bg-indigo-50 border-b border-indigo-100 shrink-0">
+              <h4 className="font-black text-xl text-gray-800 mb-1">{historyTarget.service_name}</h4>
+              <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">{selectedVehicle?.fleet_number}</p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 bg-white">
+              {isLoadingHistory ? (
+                <p className="text-center text-gray-400 italic font-bold animate-pulse">Pulling secure ledger...</p>
+              ) : taskHistoryLogs.length === 0 ? (
+                <p className="text-center text-gray-500 italic">No historical completion records found for this requirement.</p>
+              ) : (
+                <div className="space-y-4">
+                  {taskHistoryLogs.map((log, index) => (
+                    <div key={log.id || index} className="flex justify-between items-center p-4 rounded-lg border border-gray-200 shadow-sm bg-gray-50 hover:bg-indigo-50 transition-colors">
+                      <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                          Logged On: {new Date(log.created_at).toLocaleDateString('en-ZA')}
+                        </p>
+                        {log.tracking_type === 'DATE' ? (
+                          <p className="font-black text-gray-800">
+                            Completed: <span className="text-indigo-600">{log.completed_date}</span>
+                          </p>
+                        ) : (
+                          <p className="font-black text-gray-800">
+                            Odometer: <span className="text-indigo-600">{log.completed_odo} km</span>
+                          </p>
+                        )}
+                      </div>
+                      <div className="bg-white border border-gray-200 p-2 rounded-md shadow-sm">
+                        <span className="text-2xl">✅</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end shrink-0">
+              <button onClick={() => setHistoryTarget(null)} className="px-6 py-2 bg-gray-800 hover:bg-gray-900 text-white font-black text-sm rounded shadow-md transition-colors active:scale-95 uppercase tracking-widest">
+                Close Ledger
               </button>
             </div>
           </div>
