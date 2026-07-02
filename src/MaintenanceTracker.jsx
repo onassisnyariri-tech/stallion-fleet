@@ -37,7 +37,13 @@ export default function MaintenanceTracker({ companyId }) {
   const [taskHistoryLogs, setTaskHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
-  useEffect(() => {
+ useEffect(() => {
+    // 🚀 HARD RESET: Wipe the old company's data from the screen
+    setTasks([]);
+    setVehicles([]);
+    setSelectedVehicleId(null);
+    
+    // Fetch the new company's data
     if (companyId) fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]); 

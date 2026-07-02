@@ -19,6 +19,10 @@ export default function TyreDashboard({ companyId }) {
   const [intakeTread, setIntakeTread] = useState('14.0');
   const [editingTyre, setEditingTyre] = useState(null);
   const [editForm, setEditForm] = useState({ serial_number: '', brand: '', purchase_price: '', original_tread: '' });
+  const [intakeQuantity, setIntakeQuantity] = useState(1);
+  const [priceMode, setPriceMode] = useState('PER_TYRE'); // Will toggle between 'PER_TYRE' and 'TOTAL'
+  const [intakeType, setIntakeType] = useState('Trailer'); // Defaults to Trailer
+  const [intakeCondition, setIntakeCondition] = useState('NEW'); // 🚀 NEW: Tracks Virgin vs Recap
   
   const [editingFuelLog, setEditingFuelLog] = useState(null);
   const [fuelEditForm, setFuelEditForm] = useState({ odometer: '', volume: '', cost: '' });
@@ -105,26 +109,55 @@ export default function TyreDashboard({ companyId }) {
   const handleIntakeTyre = async () => {
     const numPrice = parseFloat(intakePrice) || 0;
     const numTread = parseFloat(intakeTread) || 14.0;
-    
-    const { data, error } = await supabase.from('tyres').insert([{ 
-      company_id: companyId, 
-      serial_number: intakeSerial, 
-      brand: intakeBrand,
-      purchase_price: numPrice, 
-      original_tread: numTread, 
-      tread_depth: numTread, 
-      status: 'ON HAND', 
-      virtual_mileage: 0, 
-      retread_count: 0 
-    }]).select();
+    const qty = parseInt(intakeQuantity) || 1;
+
+    if (!intakeSerial || !intakeBrand) return alert("Please provide a serial/batch number and brand.");
+
+    const calculatedPricePerTyre = priceMode === 'TOTAL' ? (numPrice / qty) : numPrice;
+    const isRecap = intakeCondition === 'RETREAD'; // 🚀 Check if it's a recap
+
+    const newTyresArray = [];
+
+    for (let i = 0; i < qty; i++) {
+      newTyresArray.push({
+        company_id: companyId,
+        serial_number: qty > 1 ? `${intakeSerial}-${i + 1}` : intakeSerial,
+        brand: intakeBrand,
+        tyre_type: intakeType, 
+        purchase_price: calculatedPricePerTyre, 
+        original_tread: numTread,
+        tread_depth: numTread,
+        status: 'ON HAND',
+        virtual_mileage: 0,
+        retread_count: isRecap ? 1 : 0 // 🚀 Automatically applies a retread count if it's stock recap
+      });
+    }
+
+    const { data, error } = await supabase.from('tyres').insert(newTyresArray).select();
 
     if (error) return alert("Database Error: " + error.message);
 
-    if (data && data[0]) {
-      await logTyreHistory(data[0].id, 'PURCHASED', `Added to yard inventory. Brand: ${intakeBrand}, Purchase Price: R ${numPrice}`, numTread);
+    if (data && data.length > 0) {
+      const conditionText = isRecap ? "Stock Recap" : "Virgin Casing";
+      for (const tyre of data) {
+        await logTyreHistory(
+          tyre.id, 
+          'PURCHASED', 
+          `Added to yard inventory in batch of ${qty} (${conditionText}). Brand: ${intakeBrand}, Purchase Price: R ${calculatedPricePerTyre.toFixed(2)}`, 
+          numTread
+        );
+      }
     }
     
-    setIntakeSerial(''); setIntakeBrand(''); setIntakePrice(''); setIntakeTread('14.0'); setShowIntakeForm(false); 
+    setIntakeSerial(''); 
+    setIntakeBrand(''); 
+    setIntakePrice(''); 
+    setIntakeTread('14.0'); 
+    setIntakeQuantity(1);
+    setPriceMode('PER_TYRE');
+    setIntakeCondition('NEW'); // 🚀 Reset the condition toggle
+    setShowIntakeForm(false); 
+    
     fetchData();
   };
 
@@ -555,26 +588,117 @@ export default function TyreDashboard({ companyId }) {
                 </button>
               ) : (
                 <div className="bg-blue-50 p-4 border border-blue-200 rounded-lg shadow-sm flex flex-col md:flex-row items-stretch md:items-end gap-4 animate-fade-in">
-                  <div className="flex gap-2 flex-1">
-                    <div className="flex-1">
-                      <label htmlFor="intakeBrand" className="block text-xs font-bold text-blue-800 mb-1">Brand</label>
-                      <input id="intakeBrand" type="text" value={intakeBrand} onChange={(e)=>setIntakeBrand(e.target.value)} className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" placeholder="e.g. Michelin" />
-                    </div>
-                    <div className="flex-1">
-                      <label htmlFor="intakeSerial" className="block text-xs font-bold text-blue-800 mb-1">Serial Number</label>
-                      <input id="intakeSerial" type="text" value={intakeSerial} onChange={(e)=>setIntakeSerial(e.target.value)} className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" placeholder="e.g. STC-800" />
-                    </div>
-                  </div>
+                  <div className="flex gap-2 flex-1 mb-3">
+  <div className="flex-1">
+    <label htmlFor="intakeBrand" className="block text-xs font-bold text-blue-800 mb-1">Brand</label>
+    <input 
+      id="intakeBrand" 
+      type="text" 
+      value={intakeBrand} 
+      onChange={(e)=>setIntakeBrand(e.target.value)} 
+      className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" 
+      placeholder="e.g. Michelin" 
+    />
+  </div>
+  
+  <div className="flex-1">
+    <label htmlFor="intakeSerial" className="block text-xs font-bold text-blue-800 mb-1">Serial Number</label>
+    <input 
+      id="intakeSerial" 
+      type="text" 
+      value={intakeSerial} 
+      onChange={(e)=>setIntakeSerial(e.target.value)} 
+      className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" 
+      placeholder="e.g. STC-800" 
+    />
+  </div>
+
+  {/* 🚀 THE NEW TYRE TYPE DROPDOWN */}
+  <div className="w-28 md:w-32">
+    <label htmlFor="intakeType" className="block text-xs font-bold text-blue-800 mb-1">Type</label>
+    <select 
+      id="intakeType" 
+      value={intakeType} 
+      onChange={(e)=>setIntakeType(e.target.value)} 
+      className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500 bg-white font-bold text-gray-700"
+    >
+      <option value="Steer">Steer</option>
+      <option value="Drive">Drive</option>
+      <option value="Trailer">Trailer</option>
+    </select>
+  </div>
+
+  <div className="w-20 md:w-24">
+    <label htmlFor="intakeQuantity" className="block text-xs font-bold text-blue-800 mb-1">Qty</label>
+    <input 
+      id="intakeQuantity" 
+      type="number" 
+      min="1" 
+      value={intakeQuantity} 
+      onChange={(e)=>setIntakeQuantity(e.target.value)} 
+      className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500 font-bold" 
+    />
+  </div>
+</div>
                   <div className="flex gap-2">
-                    <div className="flex-1 md:w-32">
-                      <label htmlFor="intakePrice" className="block text-xs font-bold text-blue-800 mb-1">Price (R)</label>
-                      <input id="intakePrice" type="number" value={intakePrice} onChange={(e)=>setIntakePrice(e.target.value)} className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" />
-                    </div>
-                    <div className="flex-1 md:w-32">
-                      <label htmlFor="intakeTread" className="block text-xs font-bold text-blue-800 mb-1">Tread (mm)</label>
-                      <input id="intakeTread" type="number" step="0.1" value={intakeTread} onChange={(e)=>setIntakeTread(e.target.value)} className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" />
-                    </div>
-                  </div>
+  <div className="flex-1">
+    <div className="flex justify-between items-center mb-1">
+      <label htmlFor="intakePrice" className="block text-xs font-bold text-blue-800">Price (R)</label>
+      
+      <div className="flex bg-blue-50 p-0.5 rounded border border-blue-200">
+        <button 
+          type="button" 
+          onClick={() => setPriceMode('PER_TYRE')} 
+          className={`px-2 py-1 text-[9px] uppercase tracking-wider font-black rounded transition-colors ${priceMode === 'PER_TYRE' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-500 hover:bg-blue-100'}`}
+        >
+          Per Casing
+        </button>
+        <button 
+          type="button" 
+          onClick={() => setPriceMode('TOTAL')} 
+          className={`px-2 py-1 text-[9px] uppercase tracking-wider font-black rounded transition-colors ${priceMode === 'TOTAL' ? 'bg-blue-600 text-white shadow-sm' : 'text-blue-500 hover:bg-blue-100'}`}
+        >
+          Total Invoice
+        </button>
+      </div>
+    </div>
+    
+    <input 
+      id="intakePrice" 
+      type="number" 
+      value={intakePrice} 
+      onChange={(e)=>setIntakePrice(e.target.value)} 
+      className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" 
+      placeholder={priceMode === 'TOTAL' ? "e.g. 24000" : "e.g. 3000"}
+    />
+  </div>
+  
+  <div className="w-24 md:w-32">
+    <label htmlFor="intakeTread" className="block text-xs font-bold text-blue-800 mb-1">Tread (mm)</label>
+    <input 
+      id="intakeTread" 
+      type="number" 
+      step="0.1" 
+      value={intakeTread} 
+      onChange={(e)=>setIntakeTread(e.target.value)} 
+      className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500" 
+    />
+  </div>
+
+  {/* 🚀 THE NEW CONDITION DROPDOWN */}
+  <div className="w-32 md:w-36">
+    <label htmlFor="intakeCondition" className="block text-xs font-bold text-blue-800 mb-1">Condition</label>
+    <select 
+      id="intakeCondition" 
+      value={intakeCondition} 
+      onChange={(e)=>setIntakeCondition(e.target.value)} 
+      className="w-full p-2 border border-blue-200 rounded outline-none focus:border-blue-500 bg-white font-bold text-gray-700"
+    >
+      <option value="NEW">Virgin / New</option>
+      <option value="RETREAD">Stock Recap</option>
+    </select>
+  </div>
+</div>
                   <div className="flex gap-2 mt-2 md:mt-0">
                     <button type="button" onClick={handleIntakeTyre} disabled={!intakeSerial} className="flex-1 md:flex-none bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700 disabled:opacity-50">Save</button>
                     <button type="button" onClick={() => setShowIntakeForm(false)} className="flex-1 md:flex-none bg-white text-gray-500 border border-gray-300 px-4 py-2 rounded font-bold hover:bg-gray-100">Cancel</button>
@@ -609,21 +733,32 @@ export default function TyreDashboard({ companyId }) {
                       <tr><td colSpan="6" className="p-10 text-center text-gray-500 font-bold italic">No tyres found in {inventoryFilter} status.</td></tr>
                     ) : (
                       filteredInventoryTyres.map(tyre => {
-                        // 🚀 NEW: Find the vehicle this tyre is mounted to
+                        // 🚀 Find the vehicle this tyre is mounted to
                         const assignedVehicle = tyre.vehicle_id ? vehicles.find(v => String(v.id) === String(tyre.vehicle_id)) : null;
 
                         return (
                           <tr key={tyre.id} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="p-3 md:p-4">
                               <span className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{tyre.brand || 'No Brand'}</span>
-                              <span className="block font-black text-gray-800 text-lg leading-none mb-1">{tyre.serial_number}</span>
+                              
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="block font-black text-gray-800 text-lg leading-none">{tyre.serial_number}</span>
+                                {/* 🚀 THE NEW TYPE BADGE IN THE LEDGER (STEP 4) */}
+                                <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-widest border ${
+                                  tyre.tyre_type === 'Steer' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                                  tyre.tyre_type === 'Drive' ? 'bg-orange-100 text-orange-800 border-orange-200' :
+                                  'bg-blue-100 text-blue-800 border-blue-200' 
+                                }`}>
+                                  {tyre.tyre_type || 'Trailer'}
+                                </span>
+                              </div>
                               
                               <div className="flex flex-wrap items-center gap-1.5 mt-1">
                                 <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded ${tyre.status === 'ACTIVE' || !tyre.status ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'}`}>
                                   {tyre.status || 'ACTIVE'}
                                 </span>
                                 
-                                {/* 🚀 NEW: Render the Fleet Number and Position badge if it is Active and Assigned */}
+                                {/* 🚀 Render the Fleet Number and Position badge if it is Active and Assigned */}
                                 {((tyre.status === 'ACTIVE' || !tyre.status) && assignedVehicle && tyre.position) && (
                                   <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 tracking-wider">
                                     🚚 {assignedVehicle.fleet_number} <span className="text-indigo-300 mx-1">|</span> {tyre.position}

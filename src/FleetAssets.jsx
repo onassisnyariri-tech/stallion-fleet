@@ -121,7 +121,14 @@ export default function FleetAssets({ companyId }) {
   };
 
   useEffect(() => {
-    fetchFleet();
+    // 🚀 HARD RESET: Wipe the old company's assets and trips from the screen
+    setAssets([]);
+    setSelectedAsset(null);
+    setTripResult(null);
+    setMountedTyres([]);
+    
+    // Fetch the new company's fleet
+    if (companyId) fetchFleet();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
 // ==========================================
