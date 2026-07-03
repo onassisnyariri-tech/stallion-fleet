@@ -287,8 +287,43 @@ export default function MaintenanceTracker({ companyId }) {
   };
 
   const vehicleTasks = tasks.filter(t => String(t.vehicle_id) === String(selectedVehicleId));
-  const adminTasks = vehicleTasks.filter(t => !t.category || String(t.category).toUpperCase() === 'ADMIN');
-  const mechTasks = vehicleTasks.filter(t => String(t.category).toUpperCase() === 'MECHANICAL');
+
+// 🚀 THE NEW UNIVERSAL URGENCY SORTER
+  const sortTasksByUrgency = (taskList) => {
+    return taskList.sort((a, b) => {
+      const getRemainingScore = (task) => {
+        if (task.tracking_type === 'DATE') {
+          // Calculate exact absolute days remaining
+          const lastDate = new Date(task.last_service_date || new Date());
+          const today = new Date();
+          const nextDue = new Date(lastDate);
+          nextDue.setDate(nextDue.getDate() + (task.interval_days || 0));
+          return Math.ceil((nextDue - today) / (1000 * 60 * 60 * 24));
+        } else {
+          // Calculate exact absolute KM remaining
+          const currentOdo = selectedVehicle?.total_mileage || 0;
+          const nextDue = (task.last_service_odo || 0) + (task.interval_km || 0);
+          const kmRemaining = nextDue - currentOdo;
+          
+          // Standardize KM to a "Days Equivalent" for mixed lists
+          // (Assuming 500km triggers the same 14-day warning tier)
+          return kmRemaining / (500 / 14); 
+        }
+      };
+
+      // Sort Ascending: Lowest remaining value (most urgent/overdue) goes to the top!
+      return getRemainingScore(a) - getRemainingScore(b);
+    });
+  };
+
+  // 🚀 Apply the sorter to both categories automatically
+  const adminTasks = sortTasksByUrgency(
+    vehicleTasks.filter(t => !t.category || String(t.category).toUpperCase() === 'ADMIN')
+  );
+  
+  const mechTasks = sortTasksByUrgency(
+    vehicleTasks.filter(t => String(t.category).toUpperCase() === 'MECHANICAL')
+  );
 
   const renderTaskCard = (task) => {
     const isDate = task.tracking_type === 'DATE';
