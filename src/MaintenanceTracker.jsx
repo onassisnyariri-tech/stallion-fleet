@@ -26,6 +26,7 @@ export default function MaintenanceTracker({ companyId }) {
   const [logDoneTarget, setLogDoneTarget] = useState(null);
   const [logDoneDate, setLogDoneDate] = useState('');
   const [logDoneOdo, setLogDoneOdo] = useState('');
+  const [logDoneName, setLogDoneName] = useState(''); // 🚀 NEW: Tracks the editable name
 
   // State for the Export Modal
   const [showExportModal, setShowExportModal] = useState(false);
@@ -105,6 +106,7 @@ export default function MaintenanceTracker({ companyId }) {
 
   const openLogDoneModal = (task) => {
     setLogDoneTarget(task);
+    setLogDoneName(task.service_name || ''); // 🚀 Pre-fills the input with current name
     if (task.tracking_type === 'DATE') {
       setLogDoneDate(new Date().toISOString().split('T')[0]); 
     } else {
@@ -114,12 +116,17 @@ export default function MaintenanceTracker({ companyId }) {
 
   // 🚀 UPDATED: Now writes to both pm_tasks and pm_history
   const executeLogDone = async () => {
-    let updatePayload = {};
+    // Grab the edited name (or fall back to the original if they accidentally cleared it)
+    const finalServiceName = logDoneName.trim() || logDoneTarget.service_name;
+
+    let updatePayload = {
+      service_name: finalServiceName // 🚀 Updates the live tracker name for the next cycle
+    };
     let historyPayload = {
       company_id: companyId,
       vehicle_id: logDoneTarget.vehicle_id,
       task_id: logDoneTarget.id,
-      service_name: logDoneTarget.service_name,
+      service_name: finalServiceName, // 🚀 Logs the history under the exact name you just typed
       category: logDoneTarget.category || 'ADMIN',
       tracking_type: logDoneTarget.tracking_type
     };
@@ -548,11 +555,23 @@ export default function MaintenanceTracker({ companyId }) {
             </div>
             
             <div className="p-6 bg-teal-50/30">
-              <h4 className="font-black text-lg text-gray-800 mb-2">{logDoneTarget.service_name}</h4>
+              {/* 🚀 THE NEW EDITABLE NAME FIELD */}
+              <div className="mb-5">
+                <label className="block text-xs font-black text-teal-800 uppercase tracking-widest mb-1">Requirement Name</label>
+                <input 
+                  type="text" 
+                  value={logDoneName} 
+                  onChange={e => setLogDoneName(e.target.value)} 
+                  className="w-full p-3 border-2 border-teal-200 rounded-lg focus:border-teal-500 outline-none text-lg font-black text-gray-800 shadow-inner bg-white"
+                />
+                <p className="text-[10px] text-gray-500 font-bold mt-1 uppercase">Edit to reflect next cycle (e.g., Minor vs Major Service)</p>
+              </div>
+
               <p className="text-sm text-gray-600 mb-4">
                 Confirm the exact {logDoneTarget.tracking_type === 'DATE' ? 'date' : 'odometer'} this requirement was fulfilled. This will reset the tracking interval AND save a permanent record to the historical ledger.
               </p>
 
+              {/* ORIGINAL DATE / ODO INPUTS KEEP WORKING HERE */}
               {logDoneTarget.tracking_type === 'DATE' ? (
                 <div>
                   <label className="block text-xs font-black text-teal-800 uppercase tracking-widest mb-2">Completion Date *</label>
