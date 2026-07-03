@@ -147,7 +147,10 @@ export default function MaintenanceTracker({ companyId }) {
     
     // 2. Write the permanent historical ledger entry
     const { error: historyError } = await supabase.from('pm_history').insert([historyPayload]);
-    if (historyError) console.error("Could not write to history ledger:", historyError.message);
+    if (historyError) {
+  alert(`HISTORY TABLE ERROR: ${historyError.message}`);
+  return; 
+}
 
     setLogDoneTarget(null);
     fetchData();
