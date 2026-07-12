@@ -20,13 +20,19 @@ export default function TyreDashboard({ companyId }) {
   const [editingTyre, setEditingTyre] = useState(null);
   const [editForm, setEditForm] = useState({ serial_number: '', brand: '', purchase_price: '', original_tread: '' });
   const [intakeQuantity, setIntakeQuantity] = useState(1);
-  const [priceMode, setPriceMode] = useState('PER_TYRE'); // Will toggle between 'PER_TYRE' and 'TOTAL'
-  const [intakeType, setIntakeType] = useState('Trailer'); // Defaults to Trailer
-  const [intakeCondition, setIntakeCondition] = useState('NEW'); // 🚀 NEW: Tracks Virgin vs Recap
+  const [priceMode, setPriceMode] = useState('PER_TYRE');
+  const [intakeType, setIntakeType] = useState('Trailer');
+  const [intakeCondition, setIntakeCondition] = useState('NEW');
   
   const [editingFuelLog, setEditingFuelLog] = useState(null);
   const [fuelEditForm, setFuelEditForm] = useState({ odometer: '', volume: '', cost: '' });
   
+  // 🚀 NEW: Fuel Analytics Filter State
+  const [fuelTimeFilter, setFuelTimeFilter] = useState('MONTH');
+  const [fuelStartDate, setFuelStartDate] = useState('');
+  const [fuelEndDate, setFuelEndDate] = useState('');
+  const [fuelTruckFilter, setFuelTruckFilter] = useState('ALL');
+
   const [editingHistoryLog, setEditingHistoryLog] = useState(null);
   const [historyEditForm, setHistoryEditForm] = useState({ logged_tread: '', logged_psi: '', details: '' });
   
@@ -37,7 +43,6 @@ export default function TyreDashboard({ companyId }) {
   const [recapCost, setRecapCost] = useState('');
   const [recapTread, setRecapTread] = useState('20.0');
 
-  // 🚀 NEW: Finalize Sale State
   const [finalizeSaleTarget, setFinalizeSaleTarget] = useState(null);
   const [salePrice, setSalePrice] = useState('');
   const [buyerName, setBuyerName] = useState('');
@@ -114,7 +119,7 @@ export default function TyreDashboard({ companyId }) {
     if (!intakeSerial || !intakeBrand) return alert("Please provide a serial/batch number and brand.");
 
     const calculatedPricePerTyre = priceMode === 'TOTAL' ? (numPrice / qty) : numPrice;
-    const isRecap = intakeCondition === 'RETREAD'; // 🚀 Check if it's a recap
+    const isRecap = intakeCondition === 'RETREAD';
 
     const newTyresArray = [];
 
@@ -129,7 +134,7 @@ export default function TyreDashboard({ companyId }) {
         tread_depth: numTread,
         status: 'ON HAND',
         virtual_mileage: 0,
-        retread_count: isRecap ? 1 : 0 // 🚀 Automatically applies a retread count if it's stock recap
+        retread_count: isRecap ? 1 : 0
       });
     }
 
@@ -155,7 +160,7 @@ export default function TyreDashboard({ companyId }) {
     setIntakeTread('14.0'); 
     setIntakeQuantity(1);
     setPriceMode('PER_TYRE');
-    setIntakeCondition('NEW'); // 🚀 Reset the condition toggle
+    setIntakeCondition('NEW');
     setShowIntakeForm(false); 
     
     fetchData();
@@ -299,14 +304,12 @@ export default function TyreDashboard({ companyId }) {
     fetchData();
   };
 
-  // 🚀 NEW: Execute Finalize Sale
   const executeFinalizeSale = async () => {
     if (!salePrice) return alert("Please provide the sale price.");
 
     const numPrice = parseFloat(salePrice) || 0;
     const buyerStr = buyerName.trim() || 'Unknown Buyer';
 
-    // 1. Update the tyre to DISPATCHED
     const { error: tyreError } = await supabase.from('tyres').update({
       status: 'DISPATCHED',
       position: null,
@@ -315,7 +318,6 @@ export default function TyreDashboard({ companyId }) {
 
     if (tyreError) return alert("Database Error: " + tyreError.message);
 
-    // 2. Log to history
     await logTyreHistory(
       finalizeSaleTarget.id,
       'DISPATCHED',
@@ -323,11 +325,10 @@ export default function TyreDashboard({ companyId }) {
       finalizeSaleTarget.tread_depth
     );
 
-    // 3. Financial ledger hit (NEGATIVE COST = REVENUE)
     await supabase.from('trips').insert([{
       company_id: companyId,
       trip_ref: `SALE-REV-${finalizeSaleTarget.serial_number}-${new Date().toISOString().split('T')[0]}`,
-      cost_tyres: -numPrice, // Reduces overall fleet CPK!
+      cost_tyres: -numPrice,
       distance_km: 0
     }]);
 
@@ -497,12 +498,48 @@ export default function TyreDashboard({ companyId }) {
   const availableToMount = tyres.filter(t => t.status === 'ON HAND');
   const hookedTrailers = selectedPowerUnit ? vehicles.filter(v => String(v.hooked_to_id) === String(selectedPowerUnit.id)) : [];
 
+  // 🚀 NEW: Fuel Ledger Time & Truck Filter Engine
+  const filteredFuelLogs = useMemo(() => {
+    let filtered = fuelLogs;
+    if (fuelTruckFilter !== 'ALL') {
+      filtered = filtered.filter(log => String(log.vehicle_id) === String(fuelTruckFilter));
+    }
+
+    if (fuelTimeFilter === 'ALL') return filtered;
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    return filtered.filter(log => {
+      const logDate = new Date(log.log_date || log.created_at);
+      
+      if (fuelTimeFilter === 'YEAR') {
+        return logDate.getFullYear() === currentYear;
+      }
+      if (fuelTimeFilter === 'MONTH') {
+        return logDate.getFullYear() === currentYear && logDate.getMonth() === currentMonth;
+      }
+      if (fuelTimeFilter === 'CUSTOM') {
+        if (!fuelStartDate || !fuelEndDate) return true;
+        const start = new Date(fuelStartDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(fuelEndDate);
+        end.setHours(23, 59, 59, 999);
+        return logDate >= start && logDate <= end;
+      }
+      return true;
+    });
+  }, [fuelLogs, fuelTimeFilter, fuelStartDate, fuelEndDate, fuelTruckFilter]);
+
+
   const fuelMetrics = useMemo(() => {
     let totalDist = 0;
     let totalVol = 0;
     
     const byVehicle = {};
-    fuelLogs.forEach(log => {
+    // 🚀 UPDATED: Run the math on the FILTERED logs, not all logs
+    filteredFuelLogs.forEach(log => {
       if (!byVehicle[log.vehicle_id]) byVehicle[log.vehicle_id] = [];
       byVehicle[log.vehicle_id].push(log);
     });
@@ -526,7 +563,7 @@ export default function TyreDashboard({ companyId }) {
       }
     });
     
-    const processed = fuelLogs.map(log => ({
+    const processed = filteredFuelLogs.map(log => ({
       ...log,
       consumption: consumptionMap[log.id] || '-',
       rpl: log.cost && log.volume ? (Number(log.cost) / Number(log.volume)).toFixed(2) : '-'
@@ -535,10 +572,10 @@ export default function TyreDashboard({ companyId }) {
     return {
       processedFuelLogs: processed,
       fleetAvgKmL: totalVol > 0 ? (totalDist / totalVol).toFixed(2) : '0.00',
-      totalVolume: fuelLogs.reduce((acc, log) => acc + (Number(log.volume) || 0), 0),
-      totalSpend: fuelLogs.reduce((acc, log) => acc + (Number(log.cost) || 0), 0)
+      totalVolume: filteredFuelLogs.reduce((acc, log) => acc + (Number(log.volume) || 0), 0),
+      totalSpend: filteredFuelLogs.reduce((acc, log) => acc + (Number(log.cost) || 0), 0)
     };
-  }, [fuelLogs]);
+  }, [filteredFuelLogs]);
 
   return (
     <div className="animate-fade-in relative overflow-hidden">
@@ -613,7 +650,6 @@ export default function TyreDashboard({ companyId }) {
     />
   </div>
 
-  {/* 🚀 THE NEW TYRE TYPE DROPDOWN */}
   <div className="w-28 md:w-32">
     <label htmlFor="intakeType" className="block text-xs font-bold text-blue-800 mb-1">Type</label>
     <select 
@@ -685,7 +721,6 @@ export default function TyreDashboard({ companyId }) {
     />
   </div>
 
-  {/* 🚀 THE NEW CONDITION DROPDOWN */}
   <div className="w-32 md:w-36">
     <label htmlFor="intakeCondition" className="block text-xs font-bold text-blue-800 mb-1">Condition</label>
     <select 
@@ -733,7 +768,6 @@ export default function TyreDashboard({ companyId }) {
                       <tr><td colSpan="6" className="p-10 text-center text-gray-500 font-bold italic">No tyres found in {inventoryFilter} status.</td></tr>
                     ) : (
                       filteredInventoryTyres.map(tyre => {
-                        // 🚀 Find the vehicle this tyre is mounted to
                         const assignedVehicle = tyre.vehicle_id ? vehicles.find(v => String(v.id) === String(tyre.vehicle_id)) : null;
 
                         return (
@@ -743,7 +777,6 @@ export default function TyreDashboard({ companyId }) {
                               
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="block font-black text-gray-800 text-lg leading-none">{tyre.serial_number}</span>
-                                {/* 🚀 THE NEW TYPE BADGE IN THE LEDGER (STEP 4) */}
                                 <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-widest border ${
                                   tyre.tyre_type === 'Steer' ? 'bg-purple-100 text-purple-800 border-purple-200' :
                                   tyre.tyre_type === 'Drive' ? 'bg-orange-100 text-orange-800 border-orange-200' :
@@ -758,7 +791,6 @@ export default function TyreDashboard({ companyId }) {
                                   {tyre.status || 'ACTIVE'}
                                 </span>
                                 
-                                {/* 🚀 Render the Fleet Number and Position badge if it is Active and Assigned */}
                                 {((tyre.status === 'ACTIVE' || !tyre.status) && assignedVehicle && tyre.position) && (
                                   <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 tracking-wider">
                                     🚚 {assignedVehicle.fleet_number} <span className="text-indigo-300 mx-1">|</span> {tyre.position}
@@ -885,8 +917,7 @@ export default function TyreDashboard({ companyId }) {
                   </div>
 
                   {hookedTrailers.map((trailer) => {
-                    // 🚀 NEW: Dynamically determine how many axles to draw
-                    let numAxles = 2; // Default for standard links
+                    let numAxles = 2;
                     const typeStr = (trailer.asset_type || trailer.type || '').toLowerCase();
                     
                     if (typeStr.includes('abnormal') || typeStr.includes('4 axle') || typeStr.includes('4-axle')) {
@@ -910,7 +941,6 @@ export default function TyreDashboard({ companyId }) {
                             </div>
                           </div>
 
-                          {/* 🚀 NEW: Automatically loops and draws the exact right number of axles */}
                           {Array.from({ length: numAxles }).map((_, index) => {
                             const axleNum = index + 1;
                             return (
@@ -941,6 +971,60 @@ export default function TyreDashboard({ companyId }) {
 
         {activeSubTab === 'fuel' && (
           <div className="space-y-6">
+            {/* 🚀 NEW: THE FILTER CONTROLS */}
+            <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+              
+              <div className="w-full lg:w-1/3">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Filter by Truck</label>
+                <select 
+                  value={fuelTruckFilter} 
+                  onChange={e => setFuelTruckFilter(e.target.value)}
+                  className="w-full p-2.5 border-2 border-gray-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:border-amber-500 bg-gray-50"
+                >
+                  <option value="ALL">All Fleet Vehicles</option>
+                  {vehicles.filter(v => !isTowedUnit(v)).map(v => (
+                    <option key={v.id} value={v.id}>{v.fleet_number} - {v.registration}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col items-end w-full lg:w-auto">
+                <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 shadow-inner w-full sm:w-auto">
+                  {['MONTH', 'YEAR', 'ALL', 'CUSTOM'].map(filter => (
+                    <button
+                      key={filter}
+                      onClick={() => setFuelTimeFilter(filter)}
+                      className={`flex-1 sm:flex-none px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${
+                        fuelTimeFilter === filter 
+                          ? 'bg-amber-500 text-white shadow-sm' 
+                          : 'text-gray-500 hover:text-gray-900 hover:bg-gray-200'
+                      }`}
+                    >
+                      {filter === 'ALL' ? 'Total' : filter === 'MONTH' ? 'This Month' : filter === 'CUSTOM' ? 'Custom' : 'This Year'}
+                    </button>
+                  ))}
+                </div>
+                
+                {fuelTimeFilter === 'CUSTOM' && (
+                  <div className="flex items-center gap-2 mt-2 bg-gray-50 p-1.5 rounded-lg border border-gray-200 animate-fade-in w-full sm:w-auto">
+                    <input 
+                      type="date" 
+                      value={fuelStartDate} 
+                      onChange={e => setFuelStartDate(e.target.value)} 
+                      className="p-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded outline-none focus:border-amber-500" 
+                    />
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">To</span>
+                    <input 
+                      type="date" 
+                      value={fuelEndDate} 
+                      onChange={e => setFuelEndDate(e.target.value)} 
+                      className="p-1.5 text-xs font-bold text-gray-700 bg-white border border-gray-300 rounded outline-none focus:border-amber-500" 
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
               <div className="bg-white p-4 rounded-xl shadow-sm border-t-4 border-amber-500">
                 <p className="text-[10px] md:text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Total Volume</p>
@@ -988,7 +1072,7 @@ export default function TyreDashboard({ companyId }) {
                   </thead>
                   <tbody>
                     {fuelMetrics.processedFuelLogs.length === 0 ? (
-                      <tr><td colSpan="7" className="p-10 text-center text-gray-500 font-bold italic">No fuel logs recorded yet. Head to the Yard Walkaround to log diesel.</td></tr>
+                      <tr><td colSpan="7" className="p-10 text-center text-gray-500 font-bold italic">No fuel logs found for these filters.</td></tr>
                     ) : (
                       fuelMetrics.processedFuelLogs.map(log => {
                         const truck = vehicles.find(v => String(v.id) === String(log.vehicle_id));
@@ -1026,7 +1110,6 @@ export default function TyreDashboard({ companyId }) {
         )}
       </div>
 
-      {/* 🚀 UPDATED: Mounting Panel with Brand and SN */}
       {mountingSlot && (
         <div className="fixed top-0 right-0 w-full sm:w-80 h-full bg-white shadow-2xl border-l border-gray-200 p-6 z-50 flex flex-col transform transition-transform translate-x-0">
           <div className="flex justify-between items-center mb-6">
@@ -1052,7 +1135,6 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 UPDATED: Inspecting Panel with Brand and SN */}
       {inspectingTyre && (
         <div className="fixed top-0 left-0 w-full sm:w-80 h-full bg-white shadow-2xl border-r border-gray-200 p-6 z-50 flex flex-col transform transition-transform translate-x-0">
           <div className="flex justify-between items-start mb-6">
@@ -1131,7 +1213,6 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 NEW: EDIT/DELETE MODAL */}
       {editingTyre && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-60 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1177,7 +1258,6 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 NEW: FUEL LOG EDIT/DELETE MODAL */}
       {editingFuelLog && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-70 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
@@ -1216,7 +1296,6 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 NEW: HISTORY LOG EDIT/DELETE MODAL */}
       {editingHistoryLog && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-80 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
@@ -1255,7 +1334,6 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 NEW: RECEIVE RECAP MODAL */}
       {receiveRecapTarget && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-90 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-purple-500">
@@ -1304,7 +1382,6 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 NEW: FINALIZE SALE MODAL */}
       {finalizeSaleTarget && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-90 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-green-500">
@@ -1353,7 +1430,6 @@ export default function TyreDashboard({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 NEW: SCRAP REASON MODAL */}
       {scrapTyreTarget && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-90 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-red-500">
