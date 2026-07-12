@@ -592,10 +592,16 @@ const executeCloseTrip = async () => {
                   </div>
                   <div>
                     <label className="block text-gray-400 font-bold text-xs uppercase tracking-wider mb-2">Asset Type</label>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => setNewAsset({...newAsset, asset_type: 'Power Unit'})} className={`flex-1 py-4 rounded-xl font-black uppercase transition-colors border-2 ${newAsset.asset_type === 'Power Unit' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-500'}`}>Power Unit</button>
-                      <button type="button" onClick={() => setNewAsset({...newAsset, asset_type: 'Trailer'})} className={`flex-1 py-4 rounded-xl font-black uppercase transition-colors border-2 ${newAsset.asset_type === 'Trailer' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-500'}`}>Trailer</button>
-                    </div>
+                    <select 
+                      value={newAsset.asset_type} 
+                      onChange={(e) => setNewAsset({...newAsset, asset_type: e.target.value})} 
+                      className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-black text-white uppercase focus:border-indigo-500 outline-none"
+                    >
+                      <option value="Power Unit">Power Unit</option>
+                      <option value="Trailer">Standard Flat Deck (2 Axle)</option>
+                      <option value="3-Axle Trailer">Tri-axle Flat Deck (3 Axle)</option>
+                      <option value="4-Axle Trailer">Abnormal Flat Deck (4 Axle)</option>
+                    </select>
                   </div>
                   <div className="flex gap-2 mt-4 pt-2 border-t border-gray-700">
                     <button type="button" onClick={() => setIsAddingAsset(false)} className="flex-1 py-4 bg-gray-700 text-white rounded-xl font-black uppercase active:bg-gray-600">Cancel</button>

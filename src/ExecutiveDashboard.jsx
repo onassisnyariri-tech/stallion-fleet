@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
+import BrandWearComparison from './BrandWearComparison';
 
 export default function ExecutiveDashboard({ companyId }) {
   const [trips, setTrips] = useState([]);
@@ -262,6 +263,12 @@ export default function ExecutiveDashboard({ companyId }) {
         </div>
 
       </div>
+
+      {/* 🚀 NEW: TIER 4: BRAND WEAR ANALYSIS */}
+      <div className="mt-8 animate-fade-in">
+        <BrandWearComparison companyId={companyId} />
+      </div>
+      
     </div>
   );
 }

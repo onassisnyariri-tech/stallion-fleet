@@ -884,32 +884,53 @@ export default function TyreDashboard({ companyId }) {
                     </div>
                   </div>
 
-                  {hookedTrailers.map((trailer) => (
-                    <div key={trailer.id} className="flex flex-col items-center">
-                      <div className="h-8 w-4 bg-gray-800"></div>
-                      <div className="w-72 border-4 border-emerald-800 rounded pb-8 pt-4 bg-emerald-50 flex flex-col items-center shadow-xl relative">
-                        <button type="button" onClick={() => handleDrop(trailer.id)} className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">DROP</button>
-                        <div className="bg-emerald-800 text-white px-4 py-1 rounded text-xs font-black mb-6 uppercase tracking-widest">{trailer.fleet_number}</div>
-                        <div className="w-full px-6 mb-8">
-                          <div className="border-2 border-dashed border-emerald-400 rounded p-2 flex justify-center gap-2 relative bg-emerald-100/50">
-                            <span className="absolute -top-2.5 bg-emerald-50 px-2 text-[9px] font-bold text-emerald-700 uppercase tracking-widest rounded">Spare Carrier Racks</span>
-                            {renderTyreSlot(trailer.id, 'Spare 1')}
-                            {renderTyreSlot(trailer.id, 'Spare 2')}
+                  {hookedTrailers.map((trailer) => {
+                    // 🚀 NEW: Dynamically determine how many axles to draw
+                    let numAxles = 2; // Default for standard links
+                    const typeStr = (trailer.asset_type || trailer.type || '').toLowerCase();
+                    
+                    if (typeStr.includes('abnormal') || typeStr.includes('4 axle') || typeStr.includes('4-axle')) {
+                      numAxles = 4;
+                    } else if (typeStr.includes('tri') || typeStr.includes('3 axle') || typeStr.includes('3-axle')) {
+                      numAxles = 3;
+                    }
+
+                    return (
+                      <div key={trailer.id} className="flex flex-col items-center">
+                        <div className="h-8 w-4 bg-gray-800"></div>
+                        <div className="w-72 border-4 border-emerald-800 rounded pb-8 pt-4 bg-emerald-50 flex flex-col items-center shadow-xl relative">
+                          <button type="button" onClick={() => handleDrop(trailer.id)} className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">DROP</button>
+                          <div className="bg-emerald-800 text-white px-4 py-1 rounded text-xs font-black mb-6 uppercase tracking-widest">{trailer.fleet_number}</div>
+                          
+                          <div className="w-full px-6 mb-8">
+                            <div className="border-2 border-dashed border-emerald-400 rounded p-2 flex justify-center gap-2 relative bg-emerald-100/50">
+                              <span className="absolute -top-2.5 bg-emerald-50 px-2 text-[9px] font-bold text-emerald-700 uppercase tracking-widest rounded">Spare Carrier Racks</span>
+                              {renderTyreSlot(trailer.id, 'Spare 1')}
+                              {renderTyreSlot(trailer.id, 'Spare 2')}
+                            </div>
                           </div>
-                        </div>
-                        <div className="w-full flex justify-between relative mb-10 px-2 -mx-2">
-                          <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
-                          <div className="flex gap-1">{renderTyreSlot(trailer.id, 'Axle 1 - LO')}{renderTyreSlot(trailer.id, 'Axle 1 - LI')}</div>
-                          <div className="flex gap-1">{renderTyreSlot(trailer.id, 'Axle 1 - RI')}{renderTyreSlot(trailer.id, 'Axle 1 - RO')}</div>
-                        </div>
-                        <div className="w-full flex justify-between relative mb-10 px-2 -mx-2">
-                          <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
-                          <div className="flex gap-1">{renderTyreSlot(trailer.id, 'Axle 2 - LO')}{renderTyreSlot(trailer.id, 'Axle 2 - LI')}</div>
-                          <div className="flex gap-1">{renderTyreSlot(trailer.id, 'Axle 2 - RI')}{renderTyreSlot(trailer.id, 'Axle 2 - RO')}</div>
+
+                          {/* 🚀 NEW: Automatically loops and draws the exact right number of axles */}
+                          {Array.from({ length: numAxles }).map((_, index) => {
+                            const axleNum = index + 1;
+                            return (
+                              <div key={`axle-${axleNum}`} className="w-full flex justify-between relative mb-10 px-2 -mx-2">
+                                <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
+                                <div className="flex gap-1">
+                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - LO`)}
+                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - LI`)}
+                                </div>
+                                <div className="flex gap-1">
+                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - RI`)}
+                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - RO`)}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : (
