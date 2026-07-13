@@ -8,6 +8,7 @@ export default function TyreDashboard({ companyId }) {
   
   const [activeSubTab, setActiveSubTab] = useState('inventory');
   const [inventoryFilter, setInventoryFilter] = useState('ACTIVE');
+  const [typeFilter, setTypeFilter] = useState('ALL'); // 🚀 NEW: Steer/Drive/Trailer Filter
   
   const fileInputRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -435,9 +436,16 @@ export default function TyreDashboard({ companyId }) {
   const handleHook = async (tractorId, trailerId) => { await supabase.from('vehicles').update({ hooked_to_id: tractorId }).eq('id', trailerId); fetchData(); };
   const handleDrop = async (trailerId) => { await supabase.from('vehicles').update({ hooked_to_id: null }).eq('id', trailerId); fetchData(); };
 
+  // 🚀 UPDATED: Now filters by both Status AND Tyre Type
   const filteredInventoryTyres = tyres.filter(t => {
     const status = t.status || 'ACTIVE';
-    return status === inventoryFilter;
+    const matchesStatus = status === inventoryFilter;
+    
+    // Default to 'Trailer' if the type is blank (based on your intake defaults)
+    const currentType = t.tyre_type || 'Trailer';
+    const matchesType = typeFilter === 'ALL' || currentType === typeFilter;
+    
+    return matchesStatus && matchesType;
   });
 
   const exportToCSV = () => {
@@ -743,12 +751,38 @@ export default function TyreDashboard({ companyId }) {
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-4 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                <h3 className="font-bold text-gray-800 uppercase tracking-widest text-sm">
-                  Ledger: {inventoryFilter === 'ON HAND' ? 'YARD / ON HAND' : inventoryFilter === 'SOLD' ? 'CASINGS TO SELL' : inventoryFilter} TYRES
+              <div className="p-4 bg-gray-50 border-b border-gray-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <h3 className="font-bold text-gray-800 uppercase tracking-widest text-sm flex items-center gap-2">
+                  Ledger: {inventoryFilter === 'ON HAND' ? 'YARD / ON HAND' : inventoryFilter === 'SOLD' ? 'CASINGS TO SELL' : inventoryFilter}
+                  {/* 🚀 NEW: Dynamic Counter Badge */}
+                  <span className="bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full text-xs font-black border border-indigo-200">
+                    {filteredInventoryTyres.length} TYRES
+                  </span>
                 </h3>
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  <button type="button" onClick={exportToCSV} className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-green-700 shadow-sm">Export Filtered CSV</button>
+                
+                <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto items-center">
+                  
+                  {/* 🚀 NEW: The Tyre Type Segmented Control */}
+                  <div className="flex bg-gray-200 p-1 rounded-lg border border-gray-300 shadow-inner w-full sm:w-auto">
+                    {['ALL', 'Steer', 'Drive', 'Trailer'].map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setTypeFilter(type)}
+                        className={`flex-1 sm:flex-none px-4 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-md transition-all ${
+                          typeFilter === type 
+                            ? 'bg-white text-indigo-600 shadow-sm' 
+                            : 'text-gray-500 hover:text-gray-800'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button type="button" onClick={exportToCSV} className="w-full sm:w-auto bg-green-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-green-700 shadow-sm whitespace-nowrap">
+                    Export CSV
+                  </button>
                 </div>
               </div>
               <div className="overflow-x-auto w-full">
