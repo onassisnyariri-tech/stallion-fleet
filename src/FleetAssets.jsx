@@ -601,6 +601,7 @@ const executeCloseTrip = async () => {
                       <option value="Trailer">Standard Flat Deck (2 Axle)</option>
                       <option value="3-Axle Trailer">Tri-axle Flat Deck (3 Axle)</option>
                       <option value="4-Axle Trailer">Abnormal Flat Deck (4 Axle)</option>
+                      <option value="6-Axle Modular Trailer">6-Axle Modular Trailer (48 Tyres)</option>
                     </select>
                   </div>
                   <div className="flex gap-2 mt-4 pt-2 border-t border-gray-700">
