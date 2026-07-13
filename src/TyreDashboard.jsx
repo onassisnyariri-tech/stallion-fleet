@@ -173,7 +173,8 @@ export default function TyreDashboard({ companyId }) {
       serial_number: tyre.serial_number || '',
       brand: tyre.brand || '',
       purchase_price: tyre.purchase_price || '',
-      original_tread: tyre.original_tread || ''
+      original_tread: tyre.original_tread || '',
+      tyre_type: tyre.tyre_type || 'Trailer' // 🚀 NEW: Pulls current type
     });
   };
 
@@ -182,7 +183,8 @@ export default function TyreDashboard({ companyId }) {
       serial_number: editForm.serial_number,
       brand: editForm.brand,
       purchase_price: parseFloat(editForm.purchase_price) || 0,
-      original_tread: parseFloat(editForm.original_tread) || 14.0
+      original_tread: parseFloat(editForm.original_tread) || 14.0,
+      tyre_type: editForm.tyre_type // 🚀 NEW: Saves the corrected type
     }).eq('id', editingTyre.id).eq('company_id', companyId);
 
     if (error) return alert("Database Error: " + error.message);
@@ -1344,6 +1346,15 @@ export default function TyreDashboard({ companyId }) {
                 <div className="flex-1">
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Orig. Tread (mm)</label>
                   <input type="number" step="0.1" value={editForm.original_tread} onChange={e => setEditForm({...editForm, original_tread: e.target.value})} className="w-full p-2 border border-gray-300 rounded focus:border-indigo-500 outline-none" />
+                </div>
+                {/* 🚀 NEW: Tyre Type Dropdown in the Edit Modal */}
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Type</label>
+                  <select value={editForm.tyre_type} onChange={e => setEditForm({...editForm, tyre_type: e.target.value})} className="w-full p-2 border border-gray-300 rounded focus:border-indigo-500 outline-none bg-white font-bold text-gray-700">
+                    <option value="Steer">Steer</option>
+                    <option value="Drive">Drive</option>
+                    <option value="Trailer">Trailer</option>
+                  </select>
                 </div>
               </div>
             </div>
