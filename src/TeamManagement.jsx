@@ -30,16 +30,12 @@ export default function TeamManagement({ companyId }) {
     setLoading(true);
 
     try {
-      /* THE KAIZEN MOVE: We reuse the exact same Edge Function architecture!
-         Instead of creating a new company, we just pass the Admin's existing companyId 
-         and the specific role they selected from the dropdown.
-      */
       const { data, error } = await supabase.functions.invoke('provision-employee', {
         body: { 
           email: email, 
           password: password, 
           companyId: companyId, // The Admin's company ID
-          role: role // 'inspector' or 'operations'
+          role: role // 'admin', 'operations', or 'inspector'
         }
       });
 
@@ -85,7 +81,7 @@ export default function TeamManagement({ companyId }) {
               <select value={role} onChange={e => setRole(e.target.value)} className="w-full p-2 border rounded bg-gray-50 outline-none focus:border-indigo-500 font-bold text-sm">
                 <option value="inspector">Yard Inspector (Walkarounds Only)</option>
                 <option value="operations">Operations (Tyres, Maintenance, Fuel)</option>
-                {/* Notice we DO NOT give them the option to create another Admin! */}
+                <option value="admin">Administrator (Full Access)</option>
               </select>
             </div>
 
