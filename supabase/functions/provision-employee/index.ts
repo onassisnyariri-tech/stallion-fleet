@@ -39,12 +39,10 @@ serve(async (req) => {
         {
           user_id: authData.user.id,
           company_id: companyId,
-          role: role
+          role: role,
+          email: email
         }
       ])
-
-    if (profileError) throw profileError
-
     // 6. Return Success
     return new Response(
       JSON.stringify({ message: 'User created successfully', user: authData.user }),
