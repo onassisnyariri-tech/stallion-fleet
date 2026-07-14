@@ -15,10 +15,10 @@ export default function TeamManagement({ companyId }) {
   }, [companyId]);
 
   const fetchTeam = async () => {
-    // Fetch everyone who shares this exact company ID
+    // 🚀 UPDATED: Now selecting 'email' from the database
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('user_id, role, created_at')
+      .select('user_id, email, role, created_at')
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
@@ -98,7 +98,8 @@ export default function TeamManagement({ companyId }) {
           <div className="space-y-3">
             {team.map((member, index) => (
               <div key={index} className="flex justify-between items-center p-3 bg-gray-50 border rounded-lg">
-                <span className="font-mono text-xs text-gray-500">{member.user_id.substring(0, 8)}...</span>
+                {/* 🚀 UPDATED: Shows the email, falls back to UUID if email is missing */}
+                <span className="font-bold text-sm text-gray-800">{member.email || member.user_id.substring(0, 8) + '...'}</span>
                 <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${
                   member.role === 'admin' ? 'bg-purple-100 text-purple-700' :
                   member.role === 'operations' ? 'bg-blue-100 text-blue-700' :
