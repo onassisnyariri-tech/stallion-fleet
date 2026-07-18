@@ -431,8 +431,8 @@ const executeCloseTrip = async () => {
     // 🚀 NEW: Detect if the tyre is just sitting on the carrier
     const isSpare = tyre.position && tyre.position.toLowerCase().includes('spare');
     
-    // Odo to log to the TYRE (null if it's a spare, so it doesn't accumulate rolling mileage)
-    const tyreOdoToLog = (walkaroundOdo && !isSpare) ? parseFloat(walkaroundOdo) : null;
+    // Odo to log to the TYRE (Use the tyre's virtual mileage instead of the truck's dash!)
+const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
     
     // Odo to log to the VEHICLE (always updates the vehicle if entered)
     const vehicleOdoToLog = walkaroundOdo ? parseFloat(walkaroundOdo) : 0;
