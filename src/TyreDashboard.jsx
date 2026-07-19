@@ -873,9 +873,37 @@ export default function TyreDashboard({ companyId }) {
         {activeSubTab === 'repairs' && (
           <div className="bg-white rounded-lg shadow-sm border border-red-200 overflow-hidden">
             <div className="p-4 bg-red-50 border-b border-red-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <h3 className="font-bold text-red-800">Active Repair Orders</h3>
-              <span className="bg-white px-3 py-1 rounded text-sm font-bold text-red-600 shadow-sm">Total Spend: R {tyres.reduce((sum, t) => sum + Number(t.repair_cost || 0), 0).toFixed(2)}</span>
-            </div>
+  <h3 className="font-bold text-red-800">Active Repair Orders</h3>
+  
+  {/* 🚀 UPGRADED: Clickable Breakdown Dropdown */}
+  <details className="relative group cursor-pointer">
+    <summary className="bg-white px-3 py-1.5 rounded text-sm font-black text-red-600 shadow-sm list-none flex items-center gap-2 border border-red-100 hover:bg-red-50 transition-colors active:scale-95">
+      Total Spend: R {tyres.reduce((sum, t) => sum + Number(t.repair_cost || 0), 0).toFixed(2)}
+      <span className="text-[10px] text-red-400 group-open:rotate-180 transition-transform">▼</span>
+    </summary>
+    
+    <div className="absolute right-0 mt-2 w-64 max-h-64 overflow-y-auto bg-white border-2 border-red-200 rounded-xl shadow-2xl z-50 p-3">
+      <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 mb-2">Cost Breakdown by Casing</h4>
+      
+      {tyres.filter(t => Number(t.repair_cost) > 0).length === 0 ? (
+         <p className="text-xs text-gray-400 p-2 text-center font-bold">No repair costs logged yet.</p>
+      ) : (
+         <div className="space-y-1">
+           {tyres
+             .filter(t => Number(t.repair_cost) > 0)
+             .sort((a, b) => Number(b.repair_cost) - Number(a.repair_cost)) // Sort highest cost to lowest
+             .map(t => (
+               <div key={t.id} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 px-1 rounded">
+                 <span className="text-xs font-bold text-gray-700">{t.serial_number}</span>
+                 <span className="text-xs text-red-600 font-mono font-bold">R {Number(t.repair_cost).toFixed(2)}</span>
+               </div>
+             ))
+           }
+         </div>
+      )}
+    </div>
+  </details>
+</div>
             <div className="p-4 md:p-6">
               {tyres.filter(t => t.status === 'REPAIR').length === 0 ? (
                 <p className="text-gray-500 italic">No tyres currently out for repair.</p>
