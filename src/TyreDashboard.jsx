@@ -954,31 +954,70 @@ export default function TyreDashboard({ companyId }) {
               <div className="bg-gray-100 p-4 md:p-8 rounded-xl border-2 border-dashed border-gray-300 overflow-x-auto">
                 <div className="flex flex-col items-center gap-4 min-w-75">
                   
-                  <div className="w-72 border-4 border-gray-800 rounded-t-3xl pb-10 pt-2 bg-gray-200 flex flex-col items-center shadow-xl">
-                    <div className="bg-gray-800 text-white px-4 py-1 rounded-full text-xs font-black mb-4 uppercase tracking-widest">{selectedPowerUnit.fleet_number}</div>
-                    <div className="w-full h-16 bg-blue-100/50 rounded-t-2xl border-b-2 border-gray-800 mb-8"></div>
-                    <div className="w-full flex justify-between px-2 relative mb-8">
-                      <div className="absolute top-4 left-0 w-full h-3 bg-gray-700"></div>
-                      {renderTyreSlot(selectedPowerUnit.id, 'Steer - L', 'L', true)}
-                      {renderTyreSlot(selectedPowerUnit.id, 'Steer - R', 'R', true)}
-                    </div>
-                    <div className="w-full px-8 mb-8">
-                      <div className="border-2 border-dashed border-gray-400 rounded p-2 flex justify-center relative bg-gray-300/50">
-                        <span className="absolute -top-2.5 bg-gray-200 px-2 text-[9px] font-bold text-gray-600 uppercase tracking-widest rounded">Spare Rack</span>
-                        {renderTyreSlot(selectedPowerUnit.id, 'Spare 1')}
-                      </div>
-                    </div>
-                    <div className="w-full flex justify-between relative mb-10 px-2 -mx-2">
-                      <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
-                      <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - LO')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - LI')}</div>
-                      <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - RI')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - RO')}</div>
-                    </div>
-                    <div className="w-full flex justify-between relative px-2 -mx-2">
-                      <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
-                      <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - LO')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - LI')}</div>
-                      <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - RI')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - RO')}</div>
-                    </div>
-                  </div>
+                  {(() => {
+  // 🚀 NEW: Detect if the Power Unit is a Bakkie / LDV
+  const isBakkie = (selectedPowerUnit.asset_type || selectedPowerUnit.type || '').toLowerCase().includes('bakkie');
+
+  if (isBakkie) {
+    return (
+      <div className="w-64 border-4 border-gray-800 rounded-t-3xl pb-8 pt-4 bg-gray-200 flex flex-col items-center shadow-xl">
+        <div className="bg-gray-800 text-white px-4 py-1 rounded-full text-xs font-black mb-4 uppercase tracking-widest">{selectedPowerUnit.fleet_number}</div>
+        <div className="w-full h-12 bg-blue-100/50 rounded-t-2xl border-b-2 border-gray-800 mb-6"></div>
+        
+        {/* BAKKIE FRONT AXLE (2 Tyres) */}
+        <div className="w-full flex justify-between px-6 relative mb-8">
+          <div className="absolute top-4 left-0 w-full h-3 bg-gray-700"></div>
+          {renderTyreSlot(selectedPowerUnit.id, 'Steer - L', 'L', true)}
+          {renderTyreSlot(selectedPowerUnit.id, 'Steer - R', 'R', true)}
+        </div>
+
+        {/* BAKKIE SPARE */}
+        <div className="w-full px-12 mb-8">
+          <div className="border-2 border-dashed border-gray-400 rounded p-2 flex justify-center relative bg-gray-300/50">
+            <span className="absolute -top-2.5 bg-gray-200 px-2 text-[9px] font-bold text-gray-600 uppercase tracking-widest rounded">Spare</span>
+            {renderTyreSlot(selectedPowerUnit.id, 'Spare 1')}
+          </div>
+        </div>
+
+        {/* BAKKIE REAR AXLE (2 Tyres) */}
+        <div className="w-full flex justify-between px-6 relative mb-4">
+          <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
+          {renderTyreSlot(selectedPowerUnit.id, 'Drive - L')}
+          {renderTyreSlot(selectedPowerUnit.id, 'Drive - R')}
+        </div>
+      </div>
+    );
+  }
+
+  // 🚀 ORIGINAL: The 10-Wheel Heavy Tractor
+  return (
+    <div className="w-72 border-4 border-gray-800 rounded-t-3xl pb-10 pt-2 bg-gray-200 flex flex-col items-center shadow-xl">
+      <div className="bg-gray-800 text-white px-4 py-1 rounded-full text-xs font-black mb-4 uppercase tracking-widest">{selectedPowerUnit.fleet_number}</div>
+      <div className="w-full h-16 bg-blue-100/50 rounded-t-2xl border-b-2 border-gray-800 mb-8"></div>
+      <div className="w-full flex justify-between px-2 relative mb-8">
+        <div className="absolute top-4 left-0 w-full h-3 bg-gray-700"></div>
+        {renderTyreSlot(selectedPowerUnit.id, 'Steer - L', 'L', true)}
+        {renderTyreSlot(selectedPowerUnit.id, 'Steer - R', 'R', true)}
+      </div>
+      <div className="w-full px-8 mb-8">
+        <div className="border-2 border-dashed border-gray-400 rounded p-2 flex justify-center relative bg-gray-300/50">
+          <span className="absolute -top-2.5 bg-gray-200 px-2 text-[9px] font-bold text-gray-600 uppercase tracking-widest rounded">Spare Rack</span>
+          {renderTyreSlot(selectedPowerUnit.id, 'Spare 1')}
+        </div>
+      </div>
+      <div className="w-full flex justify-between relative mb-10 px-2 -mx-2">
+        <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
+        <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - LO')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - LI')}</div>
+        <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - RI')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 1 - RO')}</div>
+      </div>
+      <div className="w-full flex justify-between relative px-2 -mx-2">
+        <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
+        <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - LO')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - LI')}</div>
+        <div className="flex gap-1">{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - RI')}{renderTyreSlot(selectedPowerUnit.id, 'Drive 2 - RO')}</div>
+      </div>
+    </div>
+  );
+})()}
 
                   {hookedTrailers.map((trailer) => {
                     const typeStr = (trailer.asset_type || trailer.type || '').toLowerCase();
