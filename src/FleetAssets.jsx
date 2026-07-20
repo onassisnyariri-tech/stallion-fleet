@@ -446,7 +446,7 @@ const executeCloseTrip = async () => {
 
     if (!finalTread) return alert(`Please enter a mandatory Tread Depth for ${tyre.serial_number}`);
     
-    if ((selectedAsset.asset_type === 'Power Unit' || selectedAsset.asset_type === 'Bakkie (4x2)') && !walkaroundOdo) {
+    if ((['Power Unit', 'Rigid (4x2)', 'Bakkie (4x2)'].includes(selectedAsset.asset_type)) && !walkaroundOdo) {
       return alert(`Please enter the Current Dash Odometer at the top of the screen before logging inspections.`);
     }
 
@@ -483,7 +483,7 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
     }).eq('id', tyre.id).eq('company_id', companyId); 
 
     let vehicleError = null;
-    if ((selectedAsset.asset_type === 'Power Unit' || selectedAsset.asset_type === 'Bakkie (4x2)')) {
+    if ((['Power Unit', 'Rigid (4x2)', 'Bakkie (4x2)'].includes(selectedAsset.asset_type))) {
       const { error } = await supabase.from('vehicles').update({
         total_mileage: vehicleOdoToLog
       }).eq('id', selectedAsset.id).eq('company_id', companyId); 
@@ -507,7 +507,7 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
     }
     setTimeout(() => setLoggedStatus(prev => prev.filter(id => id !== tyre.id)), 2000);
     
-    if ((selectedAsset.asset_type === 'Power Unit' || selectedAsset.asset_type === 'Bakkie (4x2)')) {
+    if ((['Power Unit', 'Rigid (4x2)', 'Bakkie (4x2)'].includes(selectedAsset.asset_type))) {
       setSelectedAsset({...selectedAsset, total_mileage: vehicleOdoToLog});
     }
   };
@@ -620,6 +620,7 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
                       className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-black text-white uppercase focus:border-indigo-500 outline-none"
                     >
                       <option value="Power Unit">Power Unit</option>
+                      <option value="Rigid (4x2)">Rigid 4 or 8-Tonner (6 Tyres)</option>
                       <option value="Bakkie (4x2)">Bakkie / LDV (4 Tyres)</option>
                       <option value="Trailer">Standard Flat Deck (2 Axle)</option>
                       <option value="3-Axle Trailer">Tri-axle Flat Deck (3 Axle)</option>
@@ -701,7 +702,7 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
               </div>
               
               <div className="flex-1 w-full">
-                {(selectedAsset.asset_type === 'Power Unit' || selectedAsset.asset_type === 'Bakkie (4x2)') ? (
+                {(['Power Unit', 'Rigid (4x2)', 'Bakkie (4x2)'].includes(selectedAsset.asset_type)) ? (
                   <>
                     <label className="block text-indigo-400 font-black uppercase tracking-wider text-xs mb-2">Current Dash Odo (km) *</label>
                     
@@ -750,7 +751,7 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
               </div>
             </div>
 
-            {(selectedAsset.asset_type === 'Power Unit' || selectedAsset.asset_type === 'Bakkie (4x2)') && (
+            {(['Power Unit', 'Rigid (4x2)', 'Bakkie (4x2)'].includes(selectedAsset.asset_type)) && (
               <>
                 <div className="bg-gray-800 rounded-2xl border-2 border-gray-700 overflow-hidden shadow-xl p-5 mb-6">
                   <h3 className="text-gray-400 font-bold text-xs uppercase tracking-wider mb-4 border-b border-gray-700 pb-2">Fuel Management</h3>
