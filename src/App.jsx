@@ -14,6 +14,7 @@ import { useAuth } from './context/AuthContext.jsx';
 import TeamManagement from './TeamManagement';
 import UserSettings from './UserSettings';
 import LiveDispatchBoard from './LiveDispatchBoard';
+import Drivers from './Drivers';
 
 export default function App() {
   const { permissions } = useAuth(); // 2. ADD THIS HOOK
@@ -160,8 +161,20 @@ useEffect(() => {
   {/* TYRES & MAINTENANCE TABS */}
   {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'office' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Tyres</button>}
   {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'pm' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Maintenance</button>}
-{permissions?.canAccessAdminSettings && (
   
+  {/* 🚀 ADMIN ONLY: DRIVERS TAB */}
+  {permissions?.canAccessAdminSettings && (
+    <button 
+      onClick={() => setActiveTab('drivers')} 
+      style={activeTab === 'drivers' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+      className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'drivers' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
+    >
+      Drivers
+    </button>
+  )}
+
+  {/* TEAM / ADMIN TAB */}
+  {permissions?.canAccessAdminSettings && (
     <button 
       onClick={() => setActiveTab('team')} 
       style={activeTab === 'team' ? { backgroundColor: brandColor, color: 'white' } : {}} 
@@ -243,6 +256,7 @@ useEffect(() => {
         {activeTab === 'pm' && hasFeature('pm') && <MaintenanceTracker companyId={companyContext?.id} />}
         {activeTab === 'reports' && hasFeature('reports') && <ProfitabilityReport companyId={companyContext?.id} />}
         {activeTab === 'admin' && session?.user?.email === 'onassis.nyariri@gmail.com' && <SuperAdminDashboard />}
+        {activeTab === 'drivers' && <Drivers companyId={companyContext?.id} />}
       {/* ADD THE TEAM ROUTE HERE */}
   {activeTab === 'team' && permissions?.canAccessAdminSettings && <TeamManagement companyId={companyContext?.id} />}
   {/* Add this line right below your other activeTab routes */}
