@@ -10,6 +10,8 @@ export default function ExecutiveDashboard({ companyId }) {
   // 🚀 NEW: State for PM Tasks and History
   const [pmTasks, setPmTasks] = useState([]);
   const [pmHistory, setPmHistory] = useState([]); 
+  // 🚀 NEW: State for Drivers
+  const [drivers, setDrivers] = useState([]);
   
   const [isLoading, setIsLoading] = useState(true);
   
@@ -31,12 +33,15 @@ export default function ExecutiveDashboard({ companyId }) {
         // 🚀 NEW: Fetch BOTH PM tables
         const { data: taskData } = await supabase.from('pm_tasks').select('*').eq('company_id', companyId);
         const { data: historyData } = await supabase.from('pm_history').select('*').eq('company_id', companyId);
+        // 🚀 NEW: Fetch drivers
+        const { data: driverData } = await supabase.from('drivers').select('*').eq('company_id', companyId);
 
         if (tripData) setTrips(tripData);
         if (tyreData) setTyres(tyreData);
         if (vehicleData) setVehicles(vehicleData);
         if (taskData) setPmTasks(taskData);
         if (historyData) setPmHistory(historyData);
+        if (driverData) setDrivers(driverData); // Save to state
         
       } catch (error) {
         console.error("Critical Dashboard Load Error:", error);
@@ -174,26 +179,26 @@ export default function ExecutiveDashboard({ companyId }) {
         </div>
       </div>
 
-      {/* 🚀 UPCOMING MAINTENANCE ALERT WIDGET */}
+      {/* 🚀 UNIFIED ACTION REQUIRED WIDGET (MAINTENANCE + COMPLIANCE) */}
       {(() => {
         const actionItems = [];
+        const today = new Date();
         
+        // ==========================================
+        // 1. VEHICLE MAINTENANCE CHECKER
+        // ==========================================
         pmTasks.forEach(task => {
           const vehicle = vehicles.find(v => String(v.id) === String(task.vehicle_id));
           if (!vehicle) return;
 
-          // 1. Find the latest history record for this specific task
           const taskHistory = pmHistory
             .filter(h => String(h.task_id) === String(task.id))
             .sort((a, b) => new Date(b.service_date || b.created_at) - new Date(a.service_date || a.created_at));
             
           const latestHistory = taskHistory.length > 0 ? taskHistory[0] : null;
-
-          // 2. Establish the baseline from history (fallback to task if history is empty)
           const lastDateVal = latestHistory?.service_date || latestHistory?.created_at || task.last_service_date;
           const lastOdoVal = latestHistory?.service_odo || task.last_service_odo || 0;
 
-          // If there is absolutely no baseline date or odo, we can't calculate due dates
           if (!lastDateVal && !lastOdoVal) return;
 
           let isDue = false;
@@ -201,15 +206,10 @@ export default function ExecutiveDashboard({ companyId }) {
           let textClass = '';
           let typeLabel = '';
 
-          // 🗓️ DATE BASED MATH
           if (task.tracking_type === 'DATE' && lastDateVal) {
-            const lastDate = new Date(lastDateVal);
-            const today = new Date();
-            const nextDue = new Date(lastDate);
+            const nextDue = new Date(lastDateVal);
             nextDue.setDate(nextDue.getDate() + (Number(task.interval_days) || 0));
-            
-            const diffTime = nextDue - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            const diffDays = Math.ceil((nextDue - today) / (1000 * 60 * 60 * 24));
             
             if (diffDays <= 14) {
               isDue = true;
@@ -217,9 +217,7 @@ export default function ExecutiveDashboard({ companyId }) {
               detailStr = diffDays < 0 ? 'OVERDUE' : diffDays === 0 ? 'TODAY' : `${diffDays} days left`;
               textClass = diffDays < 0 ? 'text-red-600' : 'text-orange-600';
             }
-          } 
-          // 🛣️ MILEAGE BASED MATH
-          else if (task.tracking_type !== 'DATE') {
+          } else if (task.tracking_type !== 'DATE') {
             const currentOdo = Number(vehicle.total_mileage) || Number(vehicle.current_odo) || 0;
             const nextDue = Number(lastOdoVal) + Number(task.interval_km || 0);
             const kmRemaining = nextDue - currentOdo;
@@ -234,38 +232,85 @@ export default function ExecutiveDashboard({ companyId }) {
 
           if (isDue) {
             actionItems.push({
-              id: task.id,
-              fleetNumber: vehicle.fleet_number,
-              assetType: vehicle.asset_type || vehicle.type,
-              taskName: task.task_name || 'Maintenance Task',
+              id: `pm-${task.id}`,
+              title: vehicle.fleet_number,
+              subtitle: vehicle.asset_type || vehicle.type,
+              taskName: task.task_name,
               typeLabel,
               detailStr,
-              textClass
+              textClass,
+              icon: '🔧'
             });
           }
         });
 
+        // ==========================================
+        // 2. DRIVER COMPLIANCE CHECKER
+        // ==========================================
+        drivers.forEach(driver => {
+          if (driver.status !== 'ACTIVE') return; // Only check active drivers
+
+          const checkExpiry = (dateString, documentName) => {
+            if (!dateString) return;
+            const expiry = new Date(dateString);
+            const diffDays = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+            
+            // 30-day warning window for compliance docs
+            if (diffDays <= 30) {
+              actionItems.push({
+                id: `drv-${driver.id}-${documentName}`,
+                title: `${driver.first_name} ${driver.last_name}`,
+                subtitle: 'Personnel',
+                taskName: `${documentName} Renewal`,
+                typeLabel: 'Compliance',
+                detailStr: diffDays < 0 ? 'EXPIRED' : diffDays === 0 ? 'TODAY' : `${diffDays} days left`,
+                textClass: diffDays < 0 ? 'text-red-600' : 'text-orange-600',
+                icon: '🛂'
+              });
+            }
+          };
+
+          checkExpiry(driver.license_expiry_date, 'Driver License');
+          checkExpiry(driver.passport_expiry_date, 'Passport');
+          checkExpiry(driver.prdp_expiry_date, 'PrDP');
+          checkExpiry(driver.medical_cert_expiry_date, 'Medical Cert');
+          checkExpiry(driver.police_clearance_expiry_date, 'Police Clearance');
+          checkExpiry(driver.hazchem_expiry_date, 'Hazchem');
+          checkExpiry(driver.defensive_driving_expiry_date, 'Defensive Driving');
+        });
+
+        // ==========================================
+        // 3. RENDER THE WIDGET
+        // ==========================================
         if (actionItems.length === 0) return null;
+
+        // Sort items so EXPIRED (red) always jumps to the top
+        actionItems.sort((a, b) => a.detailStr === 'EXPIRED' ? -1 : 1);
 
         return (
           <div className="bg-white rounded-xl shadow-sm border-l-4 border-l-orange-500 border-y border-r border-gray-200 overflow-hidden mb-8 animate-fade-in">
             <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-center">
               <h3 className="font-black text-orange-800 uppercase tracking-widest flex items-center gap-2">
-                ⚠️ Scheduled Maintenance Action Required
+                ⚠️ Operations Action Required
               </h3>
               <span className="bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
                 {actionItems.length} {actionItems.length === 1 ? 'Action Item' : 'Action Items'}
               </span>
             </div>
             
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-gray-100 max-h-100 overflow-y-auto">
               {actionItems.map(item => (
                 <div key={item.id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50 transition-colors">
-                  <div>
-                    <h4 className="font-black text-gray-800 text-lg">{item.fleetNumber}</h4>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="bg-gray-200 text-gray-700 text-[9px] px-2 py-0.5 rounded uppercase font-bold tracking-widest">{item.assetType}</span>
-                      <span className="text-sm font-bold text-gray-600">{item.taskName}</span>
+                  <div className="flex gap-3 items-center">
+                    <span className="text-2xl">{item.icon}</span>
+                    <div>
+                      <h4 className="font-black text-gray-800 text-lg">{item.title}</h4>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold tracking-widest ${item.subtitle === 'Personnel' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'}`}>
+                          {item.subtitle}
+                        </span>
+                        <span className="text-sm font-bold text-gray-600">{item.taskName}</span>
+                      </div>
                     </div>
                   </div>
                   
