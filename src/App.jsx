@@ -220,30 +220,44 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Mobile Navigation Scrollbar */}
+       {/* Mobile Navigation Scrollbar */}
         <div className="lg:hidden flex overflow-x-auto bg-gray-800 p-2 gap-2 hide-scrollbar">
-  {hasFeature('exec') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('exec')} style={activeTab === 'exec' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'exec' ? 'text-gray-400' : ''}`}>Exec</button>}
-  {hasFeature('trip') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('trip')} style={activeTab === 'trip' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'trip' ? 'text-gray-400' : ''}`}>Ledger</button>}
-  {hasFeature('reports') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'reports' ? 'text-gray-400' : ''}`}>Reports</button>}
-  
-  {hasFeature('yard') && permissions?.canAccessYard && <button onClick={() => setActiveTab('yard')} style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'yard' ? 'text-gray-400' : ''}`}>Yard</button>}
-  {/* 🚀 NEW: MOBILE DISPATCH TAB */}
-  {hasFeature('dispatch') && (
-    <button onClick={() => setActiveTab('dispatch')} style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'dispatch' ? 'text-gray-400' : ''}`}>Dispatch</button>
-  )}
-  {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'office' ? 'text-gray-400' : ''}`}>Tyres</button>}
-  {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'pm' ? 'text-gray-400' : ''}`}>Maint</button>}
-{/* ADD THE MOBILE TEAM TAB HERE */}
-  {permissions?.canAccessAdminSettings && (
-    <button 
-      onClick={() => setActiveTab('team')} 
-      style={activeTab === 'team' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-      className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'team' ? 'text-gray-400' : ''}`}
-    >
-      Team
-    </button>
-  )}
-</div>
+          {hasFeature('exec') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('exec')} style={activeTab === 'exec' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'exec' ? 'text-gray-400' : ''}`}>Exec</button>}
+          {hasFeature('trip') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('trip')} style={activeTab === 'trip' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'trip' ? 'text-gray-400' : ''}`}>Ledger</button>}
+          {hasFeature('reports') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'reports' ? 'text-gray-400' : ''}`}>Reports</button>}
+          
+          {hasFeature('yard') && permissions?.canAccessYard && <button onClick={() => setActiveTab('yard')} style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'yard' ? 'text-gray-400' : ''}`}>Yard</button>}
+          
+          {/* 🚀 MOBILE DISPATCH TAB */}
+          {hasFeature('dispatch') && (
+            <button onClick={() => setActiveTab('dispatch')} style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'dispatch' ? 'text-gray-400' : ''}`}>Dispatch</button>
+          )}
+          
+          {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'office' ? 'text-gray-400' : ''}`}>Tyres</button>}
+          {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'pm' ? 'text-gray-400' : ''}`}>Maint</button>}
+          
+          {/* 🚀 ADMIN ONLY: MOBILE DRIVERS TAB */}
+          {permissions?.canAccessAdminSettings && (
+            <button 
+              onClick={() => setActiveTab('drivers')} 
+              style={activeTab === 'drivers' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'drivers' ? 'text-gray-400' : ''}`}
+            >
+              Drivers
+            </button>
+          )}
+
+          {/* MOBILE TEAM TAB */}
+          {permissions?.canAccessAdminSettings && (
+            <button 
+              onClick={() => setActiveTab('team')} 
+              style={activeTab === 'team' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'team' ? 'text-gray-400' : ''}`}
+            >
+              Team
+            </button>
+          )}
+        </div>
       </nav>
 
       {/* Main Content Router */}
