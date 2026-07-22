@@ -38,6 +38,13 @@ export default function Drivers({ companyId }) {
   useEffect(() => {
     fetchDrivers();
   }, [companyId]);
+  // 🚀 AUTO-SAVE DRAFT TO BROWSER MEMORY
+  useEffect(() => {
+    // Only auto-save if the modal is open and we are creating a NEW driver
+    if (isModalOpen && !editingId) {
+      localStorage.setItem('stc_driver_draft', JSON.stringify(formData));
+    }
+  }, [formData, isModalOpen, editingId]);
 
   // Handle Form Inputs
   const handleChange = (e) => {
@@ -47,10 +54,22 @@ export default function Drivers({ companyId }) {
   // Open Modal for Add or Edit
   const openModal = (driver = null) => {
     if (driver) {
+      // Editing existing driver
       setFormData(driver);
       setEditingId(driver.id);
     } else {
-      setFormData(initialFormState);
+      // Adding NEW driver -> Check for draft
+      const savedDraft = localStorage.getItem('stc_driver_draft');
+      if (savedDraft) {
+        if (window.confirm("You have an unsaved driver draft. Would you like to resume it?")) {
+          setFormData(JSON.parse(savedDraft));
+        } else {
+          setFormData(initialFormState);
+          localStorage.removeItem('stc_driver_draft');
+        }
+      } else {
+        setFormData(initialFormState);
+      }
       setEditingId(null);
     }
     setIsModalOpen(true);
@@ -72,6 +91,7 @@ export default function Drivers({ companyId }) {
     } else {
       const { error } = await supabase.from('drivers').insert([payload]);
       if (error) alert("Error adding driver: " + error.message);
+      else localStorage.removeItem('stc_driver_draft'); // 🚀 WIPE DRAFT ON SUCCESS
     }
     
     setIsModalOpen(false);
