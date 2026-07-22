@@ -10,7 +10,10 @@ export default function Drivers({ companyId }) {
   const [editingId, setEditingId] = useState(null);
   
   const initialFormState = {
-    first_name: '', last_name: '', employee_id: '', phone_number: '', status: 'ACTIVE', date_of_hire: '',
+    first_name: '', last_name: '', employee_id: '', 
+    phone_number: '', phone_number_2: '', // <-- ADDED 2ND PHONE
+    date_of_birth: '', // <-- ADDED DOB
+    status: 'ACTIVE', date_of_hire: '',
     blood_type: '', medical_allergies: '', emergency_contact_name: '', emergency_contact_phone: '', emergency_contact_relation: '',
     license_number: '', license_type: 'EC', license_country: 'South Africa', license_issue_date: '', license_expiry_date: '',
     passport_number: '', passport_country: '', passport_issue_date: '', passport_expiry_date: '', 
@@ -117,6 +120,18 @@ export default function Drivers({ companyId }) {
     if (diffDays <= 30) return { label, days: diffDays, status: 'EXPIRING SOON', color: 'bg-orange-100 text-orange-800 border-orange-300' };
     return null; // Don't flag if it's healthy
   };
+  // Calculate exact age from DOB
+  const calculateAge = (dobString) => {
+    if (!dobString) return null;
+    const birthDate = new Date(dobString);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
 
   if (isLoading) return <div className="p-10 text-center text-gray-500 font-bold animate-pulse">Loading Driver Roster...</div>;
 
@@ -160,7 +175,10 @@ export default function Drivers({ companyId }) {
                 <div className={`p-4 border-b flex justify-between items-center ${driver.status === 'ACTIVE' ? 'bg-gray-50 border-gray-100' : 'bg-red-50 border-red-100'}`}>
                   <div>
                     <h3 className="font-black text-xl text-gray-900">{driver.first_name} {driver.last_name}</h3>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{driver.employee_id || 'NO ID'} • {driver.license_type || 'N/A'}</p>
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                      {driver.employee_id || 'NO ID'} 
+                      {driver.date_of_birth && ` • BORN: ${driver.date_of_birth} (${calculateAge(driver.date_of_birth)} YRS)`}
+                    </p>
                   </div>
                   <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest ${driver.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-200 text-red-900'}`}>
                     {driver.status}
@@ -168,8 +186,9 @@ export default function Drivers({ companyId }) {
                 </div>
                 
                 <div className="p-4 flex-1 space-y-4">
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <span>📞 {driver.phone_number || 'No phone listed'}</span>
+                  <div className="flex flex-col gap-1 text-sm font-medium text-gray-700">
+                    <span>📞 {driver.phone_number || 'No primary phone'}</span>
+                    {driver.phone_number_2 && <span className="text-gray-500">📱 {driver.phone_number_2} (Alt)</span>}
                   </div>
                   
                   {/* COMPLIANCE ALERTS */}
@@ -211,11 +230,15 @@ export default function Drivers({ companyId }) {
               {/* SECTION 1: IDENTITY */}
               <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
                 <h3 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">1. Identity & Employment</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div><label className="block text-xs font-bold text-gray-500 mb-1">First Name *</label><input required name="first_name" value={formData.first_name} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
                   <div><label className="block text-xs font-bold text-gray-500 mb-1">Last Name *</label><input required name="last_name" value={formData.last_name} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Date of Birth</label><input type="date" name="date_of_birth" value={formData.date_of_birth || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
                   <div><label className="block text-xs font-bold text-gray-500 mb-1">Employee ID</label><input name="employee_id" value={formData.employee_id || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Phone Number</label><input name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+                  
+                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Primary Phone</label><input name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Alternate Phone</label><input name="phone_number_2" placeholder="e.g. Zim/SA Roaming" value={formData.phone_number_2 || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+                  
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">Status</label>
                     <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-bold outline-none focus:border-indigo-500">
