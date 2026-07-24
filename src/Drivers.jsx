@@ -4,6 +4,17 @@ import { supabase } from './supabaseClient';
 export default function Drivers({ companyId }) {
   const [drivers, setDrivers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  // 🚀 1. ADD THE SEARCH STATE
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // 🚀 2. ADD THE DASHBOARD MEMORY LISTENER
+  useEffect(() => {
+    const autoSearch = sessionStorage.getItem('stc_auto_search');
+    if (autoSearch) {
+      setSearchTerm(autoSearch);
+      sessionStorage.removeItem('stc_auto_search');
+    }
+  }, []);
   
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -134,6 +145,11 @@ export default function Drivers({ companyId }) {
   };
 
   if (isLoading) return <div className="p-10 text-center text-gray-500 font-bold animate-pulse">Loading Driver Roster...</div>;
+  // 🚀 3. FILTER THE LIST BEFORE RENDERING
+  const filteredDrivers = drivers.filter(driver => {
+    const fullName = `${driver.first_name} ${driver.last_name}`.toLowerCase();
+    return fullName.includes(searchTerm.toLowerCase());
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
@@ -144,22 +160,36 @@ export default function Drivers({ companyId }) {
           <h1 className="text-3xl font-black text-gray-900 tracking-tight">Fleet Drivers</h1>
           <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mt-1">Personnel & Compliance Roster</p>
         </div>
-        <button 
-          onClick={() => openModal()} 
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-sm shadow-md transition-colors"
-        >
-          + Add Driver
-        </button>
+        
+        {/* 🚀 NEW: SEARCH & ADD BUTTON CONTAINER */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+          <input 
+            type="text" 
+            placeholder="Search drivers..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-4 py-3 border rounded-xl bg-gray-50 font-medium outline-none focus:border-indigo-500 w-full sm:min-w-62.5"
+          />
+          
+          <button 
+            onClick={() => openModal()} 
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-sm shadow-md transition-colors whitespace-nowrap"
+          >
+            + Add Driver
+          </button>
+        </div>
       </div>
+      
 
       {/* DRIVER GRID */}
-      {drivers.length === 0 ? (
+      {/* 🚀 CHANGED: Check filteredDrivers instead of drivers */}
+      {filteredDrivers.length === 0 ? (
         <div className="text-center py-20 text-gray-400 italic font-medium bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-          No drivers registered yet. Add your first driver to start tracking compliance.
+          {searchTerm ? 'No drivers match your search.' : 'No drivers registered yet. Add your first driver to start tracking compliance.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {drivers.map(driver => {
+          {filteredDrivers.map(driver => {
             // Check expiries for the card
             const expiries = [
               getExpiryStatus(driver.license_expiry_date, 'License'),

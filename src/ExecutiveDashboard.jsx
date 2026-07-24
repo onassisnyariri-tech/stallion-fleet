@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import BrandWearComparison from './BrandWearComparison';
 
-export default function ExecutiveDashboard({ companyId }) {
+export default function ExecutiveDashboard({ companyId, setActiveTab }) {
   const [trips, setTrips] = useState([]);
   const [tyres, setTyres] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -120,6 +120,7 @@ export default function ExecutiveDashboard({ companyId }) {
 
   const globalTyreMileage = tyres.reduce((sum, t) => sum + safeNum(t.virtual_mileage), 0);
   const globalCPK = globalTyreMileage > 0 ? (totalTyreAssetValue / globalTyreMileage).toFixed(4) : 0;
+  
 
   if (isLoading) return <div className="p-10 text-center text-gray-500 font-bold animate-pulse">Syncing Enterprise Data...</div>;
 
@@ -239,7 +240,8 @@ export default function ExecutiveDashboard({ companyId }) {
               typeLabel,
               detailStr,
               textClass,
-              icon: '🔧'
+              icon: '🔧',
+              targetTab: 'pm' // 🚀 ADD THIS
             });
           }
         });
@@ -265,7 +267,8 @@ export default function ExecutiveDashboard({ companyId }) {
                 typeLabel: 'Compliance',
                 detailStr: diffDays < 0 ? 'EXPIRED' : diffDays === 0 ? 'TODAY' : `${diffDays} days left`,
                 textClass: diffDays < 0 ? 'text-red-600' : 'text-orange-600',
-                icon: '🛂'
+                icon: '🛂',
+                targetTab: 'drivers' // 🚀 ADD THIS
               });
             }
           };
@@ -278,6 +281,36 @@ export default function ExecutiveDashboard({ companyId }) {
           checkExpiry(driver.hazchem_expiry_date, 'Hazchem');
           checkExpiry(driver.defensive_driving_expiry_date, 'Defensive Driving');
         });
+        // 🚀 SORT ACTION ITEMS: Dates first, then KMs. Most urgent at the top.
+  // We use [...actionItems] to avoid mutating state directly, and String() to prevent crashes.
+  const sortedActionItems = [...actionItems].sort((a, b) => {
+    const getUrgency = (text) => {
+      // 1. If it's empty, push it to the bottom
+      if (text === null || text === undefined || text === '') {
+        return { isKm: false, val: 999999 };
+      }
+      
+      // 2. Force it to be a string so .toLowerCase() NEVER crashes
+      const str = String(text).toLowerCase();
+      const isKm = str.includes('km');
+      let val = 0;
+      
+      if (str.includes('expired') || str.includes('overdue')) val = -999999;
+      else if (str.includes('today') || str.includes('now')) val = 0;
+      else {
+        const num = parseInt(str.replace(/[^0-9-]/g, ''), 10);
+        val = isNaN(num) ? 999999 : num;
+      }
+      return { isKm, val };
+    };
+
+    const aData = getUrgency(a.detailStr);
+    const bData = getUrgency(b.detailStr);
+
+    if (!aData.isKm && bData.isKm) return -1;
+    if (aData.isKm && !bData.isKm) return 1;
+    return aData.val - bData.val;
+  });
 
         // ==========================================
         // 3. RENDER THE WIDGET
@@ -299,8 +332,16 @@ export default function ExecutiveDashboard({ companyId }) {
             </div>
             
             <div className="divide-y divide-gray-100 max-h-100 overflow-y-auto">
-              {actionItems.map(item => (
-                <div key={item.id} className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50 transition-colors">
+              {sortedActionItems.map(item => (
+                <div 
+                  key={item.id} 
+                  onClick={() => {
+                    // 🚀 Save the fleet number or driver name into temporary memory
+                    sessionStorage.setItem('stc_auto_search', item.title);
+                    if (setActiveTab) setActiveTab(item.targetTab);
+                  }}
+                  className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-100 cursor-pointer transition-colors">
+                                
                   <div className="flex gap-3 items-center">
                     <span className="text-2xl">{item.icon}</span>
                     <div>

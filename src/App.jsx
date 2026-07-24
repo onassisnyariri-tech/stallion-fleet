@@ -262,7 +262,7 @@ useEffect(() => {
 
       {/* Main Content Router */}
       <main className="w-full">
-        {activeTab === 'exec' && hasFeature('exec') && <ExecutiveDashboard companyId={companyContext?.id} />}
+        {activeTab === 'exec' && hasFeature('exec') && <ExecutiveDashboard companyId={companyContext?.id} setActiveTab={setActiveTab} />}
         {activeTab === 'yard' && hasFeature('yard') && <FleetAssets companyId={companyContext?.id} />}
         {activeTab === 'trip' && hasFeature('trip') && <TripProfitability companyId={companyContext?.id} />}
         {activeTab === 'dispatch' && <LiveDispatchBoard companyId={companyContext?.id} />}

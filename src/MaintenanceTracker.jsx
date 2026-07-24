@@ -7,6 +7,14 @@ export default function MaintenanceTracker({ companyId }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   
   const [rosterSearch, setRosterSearch] = useState('');
+  // 🚀 READ DASHBOARD INSTRUCTION AND PUT IT IN YOUR EXISTING SEARCH
+  useEffect(() => {
+    const autoSearch = sessionStorage.getItem('stc_auto_search');
+    if (autoSearch) {
+      setRosterSearch(autoSearch);
+      sessionStorage.removeItem('stc_auto_search');
+    }
+  }, []);
   
   const selectedVehicle = vehicles.find(v => v.id === selectedVehicleId) || null;
   
@@ -37,6 +45,17 @@ export default function MaintenanceTracker({ companyId }) {
   const [historyTarget, setHistoryTarget] = useState(null);
   const [taskHistoryLogs, setTaskHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  // 🚀 1. ADD SEARCH STATE
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // 🚀 2. READ DASHBOARD INSTRUCTION ON LOAD
+  useEffect(() => {
+    const autoSearch = sessionStorage.getItem('stc_auto_search');
+    if (autoSearch) {
+      setSearchTerm(autoSearch);
+      sessionStorage.removeItem('stc_auto_search');
+    }
+  }, []);
 
  useEffect(() => {
     // 🚀 HARD RESET: Wipe the old company's data from the screen
