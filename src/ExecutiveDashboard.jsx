@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import BrandWearComparison from './BrandWearComparison';
 
-export default function ExecutiveDashboard({ companyId, setActiveTab }) {
+// 🚀 ADD hideFinancials = false
+export default function ExecutiveDashboard({ companyId, setActiveTab, hideFinancials = false }) {
   const [trips, setTrips] = useState([]);
   const [tyres, setTyres] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -371,28 +372,33 @@ export default function ExecutiveDashboard({ companyId, setActiveTab }) {
       })()}
 
       {/* TIER 1: THE FINANCIAL GOD-VIEW */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm border-t-4 border-t-green-500">
-          <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Gross Fleet Revenue</p>
-          <p className="text-3xl font-black text-gray-800">R {totalRevenue.toLocaleString()}</p>
+      {!hideFinancials && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm border-t-4 border-t-green-500">
+            <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Gross Fleet Revenue</p>
+            <p className="text-3xl font-black text-gray-800">R {totalRevenue.toLocaleString()}</p>
+          </div>
+          
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm border-t-4 border-t-red-400">
+            <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Total Operating Costs</p>
+            <p className="text-3xl font-black text-gray-800">R {globalTotalCost.toLocaleString()}</p>
+          </div>
+          
+          <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm border-t-4 border-t-blue-500">
+            <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Global Net Profit</p>
+            <p className={`text-3xl font-black ${globalNetProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              R {globalNetProfit.toLocaleString()}
+            </p>
+          </div>
+          
+          <div className={`p-6 rounded-xl shadow-sm border-2 flex flex-col justify-center items-center ${globalMargin >= 15 ? 'bg-green-50 border-green-500' : globalMargin > 0 ? 'bg-yellow-50 border-yellow-500' : 'bg-red-50 border-red-500'}`}>
+            <p className="text-xs font-bold text-gray-600 uppercase mb-1 tracking-wider">Global Profit Margin</p>
+            <p className={`text-4xl font-black ${globalMargin >= 15 ? 'text-green-700' : globalMargin > 0 ? 'text-yellow-700' : 'text-red-700'}`}>
+              {globalMargin}%
+            </p>
+          </div>
         </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm border-t-4 border-t-red-400">
-          <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Total Operating Costs</p>
-          <p className="text-3xl font-black text-gray-800">R {globalTotalCost.toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm border-t-4 border-t-blue-500">
-          <p className="text-xs font-bold text-gray-500 uppercase mb-2 tracking-wider">Global Net Profit</p>
-          <p className={`text-3xl font-black ${globalNetProfit >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-            R {globalNetProfit.toLocaleString()}
-          </p>
-        </div>
-        <div className={`p-6 rounded-xl shadow-sm border-2 flex flex-col justify-center items-center ${globalMargin >= 15 ? 'bg-green-50 border-green-500' : globalMargin > 0 ? 'bg-yellow-50 border-yellow-500' : 'bg-red-50 border-red-500'}`}>
-          <p className="text-xs font-bold text-gray-600 uppercase mb-1 tracking-wider">Global Profit Margin</p>
-          <p className={`text-4xl font-black ${globalMargin >= 15 ? 'text-green-700' : globalMargin > 0 ? 'text-yellow-700' : 'text-red-700'}`}>
-            {globalMargin}%
-          </p>
-        </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         

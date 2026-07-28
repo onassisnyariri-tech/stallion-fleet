@@ -140,7 +140,26 @@ useEffect(() => {
               
               <div className="hidden lg:flex gap-2 ml-4">
   {/* FINANCIAL & EXEC TABS */}
-  {hasFeature('exec') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('exec')} style={activeTab === 'exec' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'exec' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Executive</button>}
+        
+        {/* STALLION VIEW (Locked to financial permissions) */}
+        {hasFeature('exec') && permissions?.canAccessFinancials && (
+          <button 
+            onClick={() => setActiveTab('exec')} 
+            style={activeTab === 'exec' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+            className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'exec' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
+          >
+            Executive
+          </button>
+        )}
+
+        {/* 🚀 NEW: CLIENT SUMMARY VIEW (Open to clients) */}
+        <button 
+          onClick={() => setActiveTab('client-summary')} 
+          style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+          className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'client-summary' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
+        >
+          Client Summary
+        </button>
   {hasFeature('trip') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('trip')} style={activeTab === 'trip' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'trip' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Trip Ledger</button>}
   {hasFeature('reports') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'reports' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>PDF Reports</button>}
 
@@ -262,7 +281,15 @@ useEffect(() => {
 
       {/* Main Content Router */}
       <main className="w-full">
-        {activeTab === 'exec' && hasFeature('exec') && <ExecutiveDashboard companyId={companyContext?.id} setActiveTab={setActiveTab} />}
+        {/* STALLION TRUCKING VIEW: Shows everything (Protected by 'exec' feature) */}
+{activeTab === 'exec' && hasFeature('exec') && (
+  <ExecutiveDashboard companyId={companyContext?.id} setActiveTab={setActiveTab} />
+)}
+
+{/* CLIENT VIEW: Hides the money (Uses a new tab name like 'client-summary') */}
+{activeTab === 'client-summary' && (
+  <ExecutiveDashboard companyId={companyContext?.id} setActiveTab={setActiveTab} hideFinancials={true} />
+)}
         {activeTab === 'yard' && hasFeature('yard') && <FleetAssets companyId={companyContext?.id} />}
         {activeTab === 'trip' && hasFeature('trip') && <TripProfitability companyId={companyContext?.id} />}
         {activeTab === 'dispatch' && <LiveDispatchBoard companyId={companyContext?.id} />}

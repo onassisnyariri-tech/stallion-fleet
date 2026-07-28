@@ -577,8 +577,16 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
     const pos = t.position.toLowerCase().trim();
     if (pos.includes('spare')) return true;
 
-    if (sideFilter === 'LEFT') return /\b(left|driver|l|li|lo)\b/.test(pos);
-    if (sideFilter === 'RIGHT') return /\b(right|passenger|r|ri|ro)\b/.test(pos);
+    if (sideFilter === 'LEFT') {
+      // Matches "L1O", "L4-Inner", "Left", "Driver side", etc.
+      return pos.startsWith('l') || pos.includes('left') || pos.includes('driver');
+    }
+    
+    if (sideFilter === 'RIGHT') {
+      // Matches "R2I", "R6-Outer", "Right", "Passenger side", etc.
+      return pos.startsWith('r') || pos.includes('right') || pos.includes('passenger');
+    }
+    
     return true;
   });
 
