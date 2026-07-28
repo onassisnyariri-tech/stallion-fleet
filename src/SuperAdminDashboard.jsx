@@ -9,7 +9,10 @@ export default function SuperAdminDashboard() {
   const [companyName, setCompanyName] = useState('');
   const [brandColor, setBrandColor] = useState('#f97316'); 
   const [selectedFeatures, setSelectedFeatures] = useState({
-    exec: true, yard: true, trip: true, dispatch: true, reports: true, office: false, pm: false
+    exec: true, yard: true, trip: true, dispatch: true, reports: true, office: false, pm: false,
+    'client-summary': false,
+    team: false,    // 🚀 ADDED HERE
+    drivers: false  // 🚀 ADDED HERE
   });
   
   // ADDED: Admin User Credentials State
@@ -165,12 +168,18 @@ export default function SuperAdminDashboard() {
                 <div className="grid grid-cols-2 gap-2">
                   {Object.keys(selectedFeatures).map(feat => (
                     <button 
-                      key={feat}
-                      onClick={() => handleToggleFeature(feat)}
-                      className={`p-2 rounded border text-xs font-bold uppercase transition-colors ${selectedFeatures[feat] ? 'bg-green-900/40 border-green-500 text-green-400' : 'bg-gray-800 border-gray-700 text-gray-500'}`}
-                    >
-                     {feat === 'exec' ? 'Dashboard' : feat === 'pm' ? 'Maintenance' : feat === 'dispatch' ? 'Dispatch Board' : feat}
-                    </button>
+  key={feat}
+  onClick={() => handleToggleFeature(feat)}
+  className={`p-2 rounded border text-xs font-bold uppercase transition-colors ${selectedFeatures[feat] ? 'bg-green-900/40 border-green-500 text-green-400' : 'bg-gray-800 border-gray-700 text-gray-500'}`}
+>
+  {feat === 'exec' ? 'Dashboard' : 
+   feat === 'pm' ? 'Maintenance' : 
+   feat === 'dispatch' ? 'Dispatch Board' :
+   feat === 'client-summary' ? 'Client Summary' : 
+   feat === 'team' ? 'Team Roster' :      /* 🚀 ADDED HERE */
+   feat === 'drivers' ? 'Driver Mgt' :    /* 🚀 ADDED HERE */
+   feat}
+</button>
                   ))}
                 </div>
               </div>
