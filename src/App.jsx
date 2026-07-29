@@ -328,10 +328,8 @@ useEffect(() => {
         {activeTab === 'dispatch' && <LiveDispatchBoard companyId={companyContext?.id} />}
         {activeTab === 'office' && hasFeature('office') && <TyreDashboard companyId={companyContext?.id} />}
         {activeTab === 'pm' && hasFeature('pm') && <MaintenanceTracker companyId={companyContext?.id} />}
-        {/* 🚀 ADD YOUR NEW SCREEN HERE */}
-{activeTab === 'light-inspection' && (
-  <LightVehicleInspection />
-)}
+        
+
         {activeTab === 'reports' && hasFeature('reports') && <ProfitabilityReport companyId={companyContext?.id} />}
         {activeTab === 'admin' && session?.user?.email === 'onassis.nyariri@gmail.com' && <SuperAdminDashboard />}
         {activeTab === 'drivers' && <Drivers companyId={companyContext?.id} />}
