@@ -182,13 +182,15 @@ useEffect(() => {
   {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'office' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Tyres</button>}
   {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'pm' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Maintenance</button>}
   {/* 🚀 ADD YOUR NEW TAB HERE */}
-<button 
-  onClick={() => setActiveTab('light-inspection')} 
-  style={activeTab === 'light-inspection' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-  className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'light-inspection' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
->
-  Light Inspection
-</button>
+  {hasFeature('light-inspection') && (
+  <button 
+    onClick={() => setActiveTab('light-inspection')} 
+    style={activeTab === 'light-inspection' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+    className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'light-inspection' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
+  >
+    Light Inspection
+  </button>
+)}
     
   {/* 🚀 ADMIN ONLY: DRIVERS TAB */}
   {permissions?.canAccessAdminSettings && (
@@ -254,6 +256,17 @@ useEffect(() => {
           {hasFeature('trip') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('trip')} style={activeTab === 'trip' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'trip' ? 'text-gray-400' : ''}`}>Ledger</button>}
           {hasFeature('reports') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'reports' ? 'text-gray-400' : ''}`}>Reports</button>}
           
+          {/* 🚀 MOBILE CLIENT SUMMARY TAB */}
+          {hasFeature('client-summary') && (
+            <button 
+              onClick={() => setActiveTab('client-summary')} 
+              style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'client-summary' ? 'text-gray-400' : ''}`}
+            >
+              Summary
+            </button>
+          )}
+          
           {hasFeature('yard') && permissions?.canAccessYard && <button onClick={() => setActiveTab('yard')} style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'yard' ? 'text-gray-400' : ''}`}>Yard</button>}
           
           {/* 🚀 MOBILE DISPATCH TAB */}
@@ -263,6 +276,17 @@ useEffect(() => {
           
           {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'office' ? 'text-gray-400' : ''}`}>Tyres</button>}
           {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'pm' ? 'text-gray-400' : ''}`}>Maint</button>}
+          
+          {/* 🚀 MOBILE LIGHT INSPECTION TAB */}
+          {hasFeature('light-inspection') && (
+            <button 
+              onClick={() => setActiveTab('light-inspection')} 
+              style={activeTab === 'light-inspection' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'light-inspection' ? 'text-gray-400' : ''}`}
+            >
+              Light Insp.
+            </button>
+          )}
           
           {/* 🚀 ADMIN ONLY: MOBILE DRIVERS TAB */}
           {permissions?.canAccessAdminSettings && (
