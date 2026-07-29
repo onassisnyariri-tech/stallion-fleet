@@ -15,6 +15,7 @@ import TeamManagement from './TeamManagement';
 import UserSettings from './UserSettings';
 import LiveDispatchBoard from './LiveDispatchBoard';
 import Drivers from './Drivers';
+import LightVehicleInspection from './LightVehicleInspection'; // adjust path if needed
 
 export default function App() {
   const { permissions } = useAuth(); // 2. ADD THIS HOOK
@@ -180,7 +181,15 @@ useEffect(() => {
   {/* TYRES & MAINTENANCE TABS */}
   {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'office' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Tyres</button>}
   {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'pm' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Maintenance</button>}
-  
+  {/* 🚀 ADD YOUR NEW TAB HERE */}
+<button 
+  onClick={() => setActiveTab('light-inspection')} 
+  style={activeTab === 'light-inspection' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+  className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'light-inspection' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
+>
+  Light Inspection
+</button>
+    
   {/* 🚀 ADMIN ONLY: DRIVERS TAB */}
   {permissions?.canAccessAdminSettings && (
     <button 
@@ -295,9 +304,16 @@ useEffect(() => {
         {activeTab === 'dispatch' && <LiveDispatchBoard companyId={companyContext?.id} />}
         {activeTab === 'office' && hasFeature('office') && <TyreDashboard companyId={companyContext?.id} />}
         {activeTab === 'pm' && hasFeature('pm') && <MaintenanceTracker companyId={companyContext?.id} />}
+        {/* 🚀 ADD YOUR NEW SCREEN HERE */}
+{activeTab === 'light-inspection' && (
+  <LightVehicleInspection />
+)}
         {activeTab === 'reports' && hasFeature('reports') && <ProfitabilityReport companyId={companyContext?.id} />}
         {activeTab === 'admin' && session?.user?.email === 'onassis.nyariri@gmail.com' && <SuperAdminDashboard />}
         {activeTab === 'drivers' && <Drivers companyId={companyContext?.id} />}
+        {activeTab === 'light-inspection' && hasFeature('light-inspection') && (
+  <LightVehicleInspection />
+)}
       {/* ADD THE TEAM ROUTE HERE */}
   {activeTab === 'team' && permissions?.canAccessAdminSettings && <TeamManagement companyId={companyContext?.id} />}
   {/* Add this line right below your other activeTab routes */}
