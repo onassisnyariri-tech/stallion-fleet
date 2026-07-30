@@ -153,14 +153,16 @@ useEffect(() => {
           </button>
         )}
 
-        {/* 🚀 NEW: CLIENT SUMMARY VIEW (Open to clients) */}
-        <button 
-          onClick={() => setActiveTab('client-summary')} 
-          style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-          className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'client-summary' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
-        >
-          Client Summary
-        </button>
+        {/* 🚀 NEW: CLIENT SUMMARY VIEW */}
+{hasFeature('client-summary') && permissions?.canAccessFinancials && (
+  <button 
+    onClick={() => setActiveTab('client-summary')} 
+    style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+    className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'client-summary' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
+  >
+    Client Summary
+  </button>
+)}
   {hasFeature('trip') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('trip')} style={activeTab === 'trip' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'trip' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Trip Ledger</button>}
   {hasFeature('reports') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'reports' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>PDF Reports</button>}
 
@@ -168,15 +170,15 @@ useEffect(() => {
   {hasFeature('yard') && permissions?.canAccessYard && <button onClick={() => setActiveTab('yard')} style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'yard' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Yard App</button>}
   
   {/* 🚀 DESKTOP DISPATCH TAB */}
-  {hasFeature('dispatch') && (
-    <button 
-      onClick={() => setActiveTab('dispatch')} 
-      style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-      className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'dispatch' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
-    >
-      Dispatch Board
-    </button>
-  )}
+{hasFeature('dispatch') && permissions?.canAccessDispatch && (
+  <button 
+    onClick={() => setActiveTab('dispatch')} 
+    style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+    className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'dispatch' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}
+  >
+    Dispatch Board
+  </button>
+)}
   
   {/* TYRES & MAINTENANCE TABS */}
   {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'office' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Tyres</button>}
@@ -257,22 +259,26 @@ useEffect(() => {
           {hasFeature('reports') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'reports' ? 'text-gray-400' : ''}`}>Reports</button>}
           
           {/* 🚀 MOBILE CLIENT SUMMARY TAB */}
-          {hasFeature('client-summary') && (
-            <button 
-              onClick={() => setActiveTab('client-summary')} 
-              style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'client-summary' ? 'text-gray-400' : ''}`}
-            >
-              Summary
-            </button>
-          )}
-          
-          {hasFeature('yard') && permissions?.canAccessYard && <button onClick={() => setActiveTab('yard')} style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'yard' ? 'text-gray-400' : ''}`}>Yard</button>}
-          
-          {/* 🚀 MOBILE DISPATCH TAB */}
-          {hasFeature('dispatch') && (
-            <button onClick={() => setActiveTab('dispatch')} style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'dispatch' ? 'text-gray-400' : ''}`}>Dispatch</button>
-          )}
+{hasFeature('client-summary') && permissions?.canAccessFinancials && (
+  <button 
+    onClick={() => setActiveTab('client-summary')} 
+    style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+    className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'client-summary' ? 'text-gray-400' : ''}`}
+  >
+    Summary
+  </button>
+)}
+
+{/* 🚀 MOBILE DISPATCH TAB */}
+{hasFeature('dispatch') && permissions?.canAccessFinancials && (
+  <button 
+    onClick={() => setActiveTab('dispatch')} 
+    style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+    className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'dispatch' ? 'text-gray-400' : ''}`}
+  >
+    Dispatch
+  </button>
+)}
           
           {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'office' ? 'text-gray-400' : ''}`}>Tyres</button>}
           {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'pm' ? 'text-gray-400' : ''}`}>Maint</button>}
