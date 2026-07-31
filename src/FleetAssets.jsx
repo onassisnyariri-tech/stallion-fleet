@@ -570,24 +570,60 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
       alert("Database Error: Could not move tyre.");
     }
   };
-  const displayTyres = mountedTyres.filter(t => {
+  const displayTyres = mountedTyres
+  .filter(t => {
     if (sideFilter === 'ALL') return true;
     if (!t.position || t.position.trim() === '') return true; 
     
     const pos = t.position.toLowerCase().trim();
+    
+    // Keeps the spare visible on all views
     if (pos.includes('spare')) return true;
 
     if (sideFilter === 'LEFT') {
-      // Matches "L1O", "L4-Inner", "Left", "Driver side", etc.
-      return pos.startsWith('l') || pos.includes('left') || pos.includes('driver');
+      return pos.includes('left') || 
+             pos.includes('driver') || 
+             /l\d/.test(pos) || 
+             /\dl/.test(pos) || 
+             /\bl\b/.test(pos) || 
+             /\bl[io]\b/.test(pos);
     }
     
     if (sideFilter === 'RIGHT') {
-      // Matches "R2I", "R6-Outer", "Right", "Passenger side", etc.
-      return pos.startsWith('r') || pos.includes('right') || pos.includes('passenger');
+      return pos.includes('right') || 
+             pos.includes('passenger') || 
+             /r\d/.test(pos) || 
+             /\dr/.test(pos) || 
+             /\br\b/.test(pos) || 
+             /\br[io]\b/.test(pos);
     }
     
     return true;
+  })
+  .sort((a, b) => {
+    const getSortValue = (pos) => {
+      if (!pos) return 999;
+      const lowerPos = pos.toLowerCase();
+      
+      // 1. Force the spare to the very bottom
+      if (lowerPos.includes('spare')) return 1000;
+      
+      // 2. 🚀 NEW: Force Steer / Front tyres to the absolute top
+      if (lowerPos.includes('steer') || lowerPos.includes('front')) return 0;
+      
+      // 3. Sort the rest of the axles numerically (Drive 1, Axle 2, etc.)
+      const match = lowerPos.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 998;
+    };
+
+    const axleA = getSortValue(a.position);
+    const axleB = getSortValue(b.position);
+
+    if (axleA === axleB) {
+      return (a.position || '').localeCompare(b.position || '');
+    }
+
+    return axleA - axleB;
   });
 
   return (
