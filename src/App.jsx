@@ -268,7 +268,16 @@ useEffect(() => {
     Summary
   </button>
 )}
-
+{/* 🚀 MOBILE YARD TAB */}
+{hasFeature('yard') && (
+  <button 
+    onClick={() => setActiveTab('yard')} 
+    style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+    className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'yard' ? 'text-gray-400' : ''}`}
+  >
+    Yard
+  </button>
+)}
 {/* 🚀 MOBILE DISPATCH TAB */}
 {hasFeature('dispatch') && permissions?.canAccessFinancials && (
   <button 
