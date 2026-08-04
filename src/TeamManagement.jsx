@@ -15,14 +15,23 @@ export default function TeamManagement({ companyId }) {
   }, [companyId]);
 
   const fetchTeam = async () => {
-    // 🚀 UPDATED: Now selecting 'email' from the database
     const { data, error } = await supabase
       .from('user_profiles')
       .select('user_id, email, role, created_at')
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
 
-    if (data) setTeam(data);
+    if (error) {
+      console.error("Error fetching team:", error);
+      return;
+    }
+
+    if (data) {
+      // 🚀 Hides inactive users on the frontend instead of the database!
+      // This prevents the "blank list" bug if some users have a NULL role.
+      const activeUsers = data.filter(user => user.role !== 'inactive');
+      setTeam(activeUsers);
+    }
   };
 
   const handleAddEmployee = async (e) => {
@@ -34,8 +43,8 @@ export default function TeamManagement({ companyId }) {
         body: { 
           email: email, 
           password: password, 
-          companyId: companyId, // The Admin's company ID
-          role: role // 'admin', 'operations', or 'inspector'
+          companyId: companyId, 
+          role: role 
         }
       });
 
@@ -53,11 +62,54 @@ export default function TeamManagement({ companyId }) {
     }
   };
 
+  // 🚀 NEW: Revoke Access Function
+  const handleRemoveUser = async (userId) => {
+    if (!window.confirm("Are you sure you want to revoke access for this user? They will be instantly locked out of the app.")) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ role: 'inactive' })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      setTeam(prevTeam => prevTeam.filter(member => member.user_id !== userId));
+      alert("User access successfully revoked.");
+      
+    } catch (err) {
+      console.error("Error removing user:", err);
+      alert("Failed to remove user: " + err.message);
+    }
+  };
+// 🚀 NEW: Update Role Function
+  const handleUpdateRole = async (userId, newRole) => {
+    try {
+      // Update the database
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ role: newRole })
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      // Update the screen instantly
+      setTeam(prevTeam => 
+        prevTeam.map(member => 
+          member.user_id === userId ? { ...member, role: newRole } : member
+        )
+      );
+      
+    } catch (err) {
+      console.error("Error updating role:", err);
+      alert("Failed to update role: " + err.message);
+    }
+  };
   return (
     <div className="p-6 max-w-4xl mx-auto font-sans">
       <h2 className="text-2xl font-black text-gray-800 uppercase tracking-widest mb-6">
-        Team Directory
-      </h2>
+  Team Directory - TEST
+</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         
@@ -97,16 +149,36 @@ export default function TeamManagement({ companyId }) {
           
           <div className="space-y-3">
             {team.map((member, index) => (
-              <div key={index} className="flex justify-between items-center p-3 bg-gray-50 border rounded-lg">
-                {/* 🚀 UPDATED: Shows the email, falls back to UUID if email is missing */}
-                <span className="font-bold text-sm text-gray-800">{member.email || member.user_id.substring(0, 8) + '...'}</span>
-                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${
-                  member.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                  member.role === 'operations' ? 'bg-blue-100 text-blue-700' :
-                  'bg-orange-100 text-orange-700'
-                }`}>
-                  {member.role}
-                </span>
+              <div key={member.user_id || index} className="flex flex-wrap md:flex-nowrap justify-between items-center p-3 bg-gray-50 border rounded-lg hover:border-gray-300 transition-colors gap-3">
+                
+                <div className="flex items-center gap-3">
+                  <span className="font-bold text-sm text-gray-800">
+                    {member.email || (member.user_id ? member.user_id.substring(0, 8) + '...' : 'Unknown')}
+                  </span>
+                  
+                  {/* 🚀 UPDATED: Role Badge is now a clickable dropdown! */}
+                  <select
+                    value={member.role || 'inspector'}
+                    onChange={(e) => handleUpdateRole(member.user_id, e.target.value)}
+                    className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded cursor-pointer outline-none border-none ${
+                      member.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                      member.role === 'operations' ? 'bg-blue-100 text-blue-700' :
+                      'bg-orange-100 text-orange-700'
+                    }`}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="operations">Operations</option>
+                    <option value="inspector">Inspector</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => handleRemoveUser(member.user_id)}
+                  className="px-3 py-1 bg-white border border-red-200 text-red-600 text-[10px] font-bold uppercase tracking-wider rounded hover:bg-red-600 hover:text-white transition-colors"
+                >
+                  Revoke
+                </button>
+
               </div>
             ))}
           </div>

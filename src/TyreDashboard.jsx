@@ -95,16 +95,18 @@ export default function TyreDashboard({ companyId }) {
     return t.includes('deck') || t.includes('link') || t.includes('trailer');
   };
 
-  const logTyreHistory = async (tyreId, action, details, tread, psi = null) => {
-    await supabase.from('tyre_history').insert([{ 
-      company_id: companyId,
-      tyre_id: tyreId, 
-      action: action, 
-      details: details, 
-      logged_tread: tread, 
-      logged_psi: psi 
-    }]);
-  };
+  const logTyreHistory = async (tyreId, action, details, tread, psi = null, vehicleReg = null, position = null) => {
+  await supabase.from('tyre_history').insert([{ 
+    company_id: companyId,
+    tyre_id: tyreId, 
+    action: action, 
+    details: details, 
+    logged_tread: tread, 
+    logged_psi: psi,
+    vehicle_reg: vehicleReg, // 🚀 Saves the vehicle for the badge
+    position: position       // 🚀 Saves the position for the badge
+  }]);
+};
 
   const handleViewHistory = async (tyre) => {
     setHistoryPanelTyre(tyre); setIsLoadingHistory(true);
@@ -364,17 +366,23 @@ export default function TyreDashboard({ companyId }) {
     handleViewHistory(historyPanelTyre);
   };
 
-  const handleMountTyre = async (tyreId) => {
+ const handleMountTyre = async (tyreId) => {
     const tyre = tyres.find(t => t.id === tyreId);
     const targetVehicle = vehicles.find(v => String(v.id) === String(mountingSlot.vehicleId));
+    
     await supabase.from('tyres').update({ vehicle_id: mountingSlot.vehicleId, position: mountingSlot.position, status: 'ACTIVE' }).eq('id', tyreId);
-    await logTyreHistory(tyreId, 'MOUNTED', `Mounted to ${targetVehicle?.fleet_number} at position: ${mountingSlot.position}`, tyre.tread_depth);
-    setMountingSlot(null); fetchData();
+    
+    // 🚀 UPDATED: Added `null` for PSI before the Vehicle and Position
+    await logTyreHistory(tyreId, 'MOUNTED', `Mounted to ${targetVehicle?.fleet_number} at position: ${mountingSlot.position}`, tyre.tread_depth, null, targetVehicle?.fleet_number, mountingSlot.position);
+    
+    setMountingSlot(null); 
+    fetchData();
   };
 
   const handleUnmountTyre = async (tyreId, destinationStatus) => {
     const tyre = tyres.find(t => t.id === tyreId);
     const safeStatus = String(destinationStatus).trim().toUpperCase();
+    const sourceVehicle = vehicles.find(v => String(v.id) === String(tyre.vehicle_id));
 
     if (safeStatus === 'SCRAPPED') {
       setScrapTyreTarget({ tyre, fromInspectPanel: true });
@@ -385,7 +393,10 @@ export default function TyreDashboard({ companyId }) {
     if (!isConfirmed) return;
 
     await supabase.from('tyres').update({ vehicle_id: null, position: null, status: safeStatus }).eq('id', tyreId).eq('company_id', companyId);
-    await logTyreHistory(tyreId, 'UNMOUNTED', `Removed from unit. Sent to: ${safeStatus}`, tyre.tread_depth);
+    
+    // 🚀 UPDATED: Added `null` for PSI before the Vehicle and Position
+    await logTyreHistory(tyreId, 'UNMOUNTED', `Removed from unit. Sent to: ${safeStatus}`, tyre.tread_depth, null, sourceVehicle?.fleet_number, tyre.position);
+    
     setInspectingTyre(null); 
     fetchData();
   };
@@ -415,15 +426,36 @@ export default function TyreDashboard({ companyId }) {
   };
 
   const handleLogInspection = async (tyreId) => {
+    // 1. 🚀 Find the tyre and its vehicle to get the names for the badges
+    const tyre = tyres.find(t => t.id === tyreId);
+    const vehicle = vehicles.find(v => String(v.id) === String(tyre?.vehicle_id));
+
     const numericTread = parseFloat(newTread);
     const numericPsi = newPsi ? parseFloat(newPsi) : null;
+    
     const updatePayload = { tread_depth: numericTread };
     if (numericPsi) updatePayload.current_psi = numericPsi;
+    
     await supabase.from('tyres').update(updatePayload).eq('id', tyreId);
+    
     let detailsStr = `Tread depth logged: ${numericTread}mm.`;
     if (numericPsi) detailsStr += ` Pressure logged: ${numericPsi} PSI.`;
-    await logTyreHistory(tyreId, 'INSPECTED', detailsStr, numericTread, numericPsi);
-    setInspectingTyre(null); setNewTread(''); setNewPsi(''); fetchData();
+    
+    // 2. 🚀 Pass the variables in order: Tread, PSI, Vehicle, Position
+    await logTyreHistory(
+      tyreId, 
+      'INSPECTED', 
+      detailsStr, 
+      numericTread, 
+      numericPsi,              // <--- PSI
+      vehicle?.fleet_number,   // <--- Vehicle Badge
+      tyre?.position           // <--- Position Badge
+    );
+    
+    setInspectingTyre(null); 
+    setNewTread(''); 
+    setNewPsi(''); 
+    fetchData();
   };
 
   const handleCompleteRepair = async (tyreId, currentRepairTotal) => {
