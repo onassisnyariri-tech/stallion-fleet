@@ -108,7 +108,7 @@ export default function TeamManagement({ companyId }) {
   return (
     <div className="p-6 max-w-4xl mx-auto font-sans">
       <h2 className="text-2xl font-black text-gray-800 uppercase tracking-widest mb-6">
-  Team Directory - TEST
+  Team Directory
 </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
