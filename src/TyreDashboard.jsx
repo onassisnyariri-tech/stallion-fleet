@@ -367,17 +367,38 @@ export default function TyreDashboard({ companyId }) {
   };
 
  const handleMountTyre = async (tyreId) => {
-    const tyre = tyres.find(t => t.id === tyreId);
-    const targetVehicle = vehicles.find(v => String(v.id) === String(mountingSlot.vehicleId));
-    
-    await supabase.from('tyres').update({ vehicle_id: mountingSlot.vehicleId, position: mountingSlot.position, status: 'ACTIVE' }).eq('id', tyreId);
-    
-    // 🚀 UPDATED: Added `null` for PSI before the Vehicle and Position
-    await logTyreHistory(tyreId, 'MOUNTED', `Mounted to ${targetVehicle?.fleet_number} at position: ${mountingSlot.position}`, tyre.tread_depth, null, targetVehicle?.fleet_number, mountingSlot.position);
-    
-    setMountingSlot(null); 
-    fetchData();
-  };
+  const tyre = tyres.find(t => t.id === tyreId);
+  const targetVehicle = vehicles.find(v => String(v.id) === String(mountingSlot.vehicleId));
+  
+  // 1. Get the truck's current odometer (fallback to 0 if missing)
+  const truckOdo = targetVehicle?.odometer || 0;
+
+  // 2. Protect the tyre's existing mileage (if it's new, it defaults to 0)
+  const currentTyreMileage = tyre.virtual_mileage || 0;
+
+  // 3. 🚀 NEW: Overpower the database by sending exact mileages!
+  await supabase.from('tyres').update({ 
+    vehicle_id: mountingSlot.vehicleId, 
+    position: mountingSlot.position, 
+    status: 'ACTIVE',
+    installMileage: truckOdo,           // Locks in the start point for trip math
+    virtual_mileage: currentTyreMileage // Stops the DB from copying the truck odo!
+  }).eq('id', tyreId);
+  
+  // 🚀 UPDATED: Also logging the truck odo into the history text for better tracking!
+  await logTyreHistory(
+    tyreId, 
+    'MOUNTED', 
+    `Mounted to ${targetVehicle?.fleet_number} at position: ${mountingSlot.position}. Truck Odo: ${truckOdo}km`, 
+    tyre.tread_depth, 
+    null, 
+    targetVehicle?.fleet_number, 
+    mountingSlot.position
+  );
+  
+  setMountingSlot(null); 
+  fetchData();
+};
 
   const handleUnmountTyre = async (tyreId, destinationStatus) => {
     const tyre = tyres.find(t => t.id === tyreId);
@@ -467,8 +488,32 @@ export default function TyreDashboard({ companyId }) {
     fetchData();
   };
 
-  const handleHook = async (tractorId, trailerId) => { await supabase.from('vehicles').update({ hooked_to_id: tractorId }).eq('id', trailerId); fetchData(); };
-  const handleDrop = async (trailerId) => { await supabase.from('vehicles').update({ hooked_to_id: null }).eq('id', trailerId); fetchData(); };
+  const handleHook = async (tractorId, trailerId) => {
+  if (!tractorId || !trailerId) return;
+
+  // 1. Find how many trailers are already on this truck
+  const currentlyHooked = vehicles.filter(v => String(v.hooked_to_id) === String(tractorId));
+  
+  // 2. The new trailer takes the next available position (1, 2, 3...)
+  const nextPosition = currentlyHooked.length + 1;
+
+  // 3. Save both the connection AND the position to the database
+  await supabase.from('vehicles').update({ 
+    hooked_to_id: tractorId,
+    hook_position: nextPosition 
+  }).eq('id', trailerId);
+  
+  fetchData(); 
+};
+  const handleDrop = async (trailerId) => {
+  // Make sure we clear the hook_position when dropping!
+  await supabase.from('vehicles').update({ 
+    hooked_to_id: null, 
+    hook_position: null 
+  }).eq('id', trailerId);
+  
+  fetchData();
+};
 
   // 🚀 UPDATED: Now filters by both Status AND Tyre Type
   const filteredInventoryTyres = tyres.filter(t => {
@@ -1093,8 +1138,13 @@ export default function TyreDashboard({ companyId }) {
   );
 })()}
 
-                  {hookedTrailers.map((trailer) => {
-                    const typeStr = (trailer.asset_type || trailer.type || '').toLowerCase();
+                  // 🚀 NEW: Added the .sort() function right before the .map()
+{hookedTrailers
+  .sort((a, b) => (a.hook_position || 99) - (b.hook_position || 99))
+  .map((trailer) => {
+    const typeStr = (trailer.asset_type || trailer.type || '').toLowerCase();
+    
+    // ... the rest of your monster detector and rendering code stays exactly the same!
                     
                     // 🚀 NEW: The 48-Tyre Monster Detector
                     if (typeStr.includes('6-axle') || typeStr.includes('6 axle') || typeStr.includes('modular')) {
