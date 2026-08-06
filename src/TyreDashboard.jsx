@@ -92,8 +92,9 @@ export default function TyreDashboard({ companyId }) {
 
   const isTowedUnit = (vehicle) => {
     const t = (vehicle?.asset_type || vehicle?.type || '').toLowerCase();
-    return t.includes('deck') || t.includes('link') || t.includes('trailer');
-  };
+    // 🚀 FIXED: Added 'dolly' so it correctly categorizes as a towed unit
+    return t.includes('deck') || t.includes('link') || t.includes('trailer') || t.includes('dolly');
+};
 
   const logTyreHistory = async (tyreId, action, details, tread, psi = null, vehicleReg = null, position = null) => {
   await supabase.from('tyre_history').insert([{ 
@@ -1138,125 +1139,120 @@ export default function TyreDashboard({ companyId }) {
   );
 })()}
 
-                  // 🚀 NEW: Added the .sort() function right before the .map()
-{hookedTrailers
-  .sort((a, b) => (a.hook_position || 99) - (b.hook_position || 99))
-  .map((trailer) => {
-    const typeStr = (trailer.asset_type || trailer.type || '').toLowerCase();
-    
-    // ... the rest of your monster detector and rendering code stays exactly the same!
-                    
-                    // 🚀 NEW: The 48-Tyre Monster Detector
-                    if (typeStr.includes('6-axle') || typeStr.includes('6 axle') || typeStr.includes('modular')) {
-                      return (
-                        <div key={trailer.id} className="flex flex-col items-center">
-                          <div className="h-8 w-4 bg-gray-800"></div>
-                          
-                          {/* Notice the w-[380px] to make the graphic wide enough for 8 tyres across! */}
-                          <div className="w-95 border-4 border-emerald-800 rounded pb-8 pt-4 bg-emerald-50 flex flex-col items-center shadow-xl relative">
-                            <button type="button" onClick={() => handleDrop(trailer.id)} className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">DROP</button>
-                            <div className="bg-emerald-800 text-white px-4 py-1 rounded text-xs font-black mb-6 uppercase tracking-widest">{trailer.fleet_number}</div>
-                            
-                            <div className="w-full px-6 mb-8">
-                              <div className="border-2 border-dashed border-emerald-400 rounded p-2 flex justify-center gap-2 relative bg-emerald-100/50">
-                                <span className="absolute -top-2.5 bg-emerald-50 px-2 text-[9px] font-bold text-emerald-700 uppercase tracking-widest rounded">Spare Racks</span>
-                                {renderTyreSlot(trailer.id, 'Spare 1')}
-                                {renderTyreSlot(trailer.id, 'Spare 2')}
-                              </div>
-                            </div>
+  {hookedTrailers
+      .sort((a, b) => (a.hook_position || 99) - (b.hook_position || 99))
+      .map((trailer) => {
+        const typeStr = (trailer.asset_type || trailer.type || '').toLowerCase();
+        
+        // 🚀 Detect if it's a Dolly or Abnormal (8 tyres wide)
+        const isEightAcross = typeStr.includes('dolly') || typeStr.includes('32-tyre') || typeStr.includes('modular');
+        
+        // 🚀 Count the axles dynamically
+        let numAxles = 2; // Default
+        if (typeStr.includes('dolly')) {
+          numAxles = 2; 
+        } else if (typeStr.includes('4 axle') || typeStr.includes('4-axle') || typeStr.includes('abnormal') || typeStr.includes('modular')) {
+          numAxles = 4;
+        } else if (typeStr.includes('tri') || typeStr.includes('3 axle') || typeStr.includes('3-axle')) {
+          numAxles = 3;
+        }
 
-                            {/* FRONT AXLE GROUP: 2 Axles */}
-                            <div className="w-full px-4 mb-8">
-                              <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-4 border-b-2 border-emerald-200 pb-1">Front Group (16 Tyres)</p>
-                              {[1, 2].map(axleNum => (
-                                <div key={`axle-${axleNum}`} className="w-full flex justify-between relative mb-8">
-                                  <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
-                                  <div className="flex gap-0.5">
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L4`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L3`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L2`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L1`)}
-                                  </div>
-                                  <div className="flex gap-0.5">
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R1`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R2`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R3`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R4`)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+        // ==========================================
+        // 🚛 LAYOUT A: 8-TYRE WIDE (Dolly & Abnormal)
+        // ==========================================
+        if (isEightAcross) {
+          return (
+            <div key={trailer.id} className="flex flex-col items-center">
+              <div className="h-8 w-4 bg-gray-800"></div>
+              
+              <div className="w-95 border-4 border-emerald-800 rounded pb-8 pt-4 bg-emerald-50 flex flex-col items-center shadow-xl relative">
+                <button type="button" onClick={() => handleDrop(trailer.id)} className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">DROP</button>
+                
+                {/* 🚀 This automatically pulls the Dolly's own plate, or the Rear Trailer's plate! */}
+                <div className="bg-emerald-800 text-white px-4 py-1 rounded text-xs font-black mb-6 uppercase tracking-widest">
+                  {trailer.fleet_number}
+                </div>
+                
+                <div className="w-full px-6 mb-8">
+                  <div className="border-2 border-dashed border-emerald-400 rounded p-2 flex justify-center gap-2 relative bg-emerald-100/50">
+                    <span className="absolute -top-2.5 bg-emerald-50 px-2 text-[9px] font-bold text-emerald-700 uppercase tracking-widest rounded">Spare Racks</span>
+                    {renderTyreSlot(trailer.id, 'Spare 1')}
+                    {renderTyreSlot(trailer.id, 'Spare 2')}
+                  </div>
+                </div>
 
-                            {/* REAR AXLE GROUP: 4 Axles */}
-                            <div className="w-full px-4">
-                              <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-4 border-b-2 border-emerald-200 pb-1">Rear Group (32 Tyres)</p>
-                              {[3, 4, 5, 6].map(axleNum => (
-                                <div key={`axle-${axleNum}`} className="w-full flex justify-between relative mb-8">
-                                  <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
-                                  <div className="flex gap-0.5">
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L4`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L3`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L2`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - L1`)}
-                                  </div>
-                                  <div className="flex gap-0.5">
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R1`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R2`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R3`)}
-                                    {renderTyreSlot(trailer.id, `Axle ${axleNum} - R4`)}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // 🚀 THE ORIGINAL LOGIC (For Standard, Tri-Axle, and 4-Axle)
-                    let numAxles = 2; // Default for standard links
-                    if (typeStr.includes('abnormal') || typeStr.includes('4 axle') || typeStr.includes('4-axle')) {
-                      numAxles = 4;
-                    } else if (typeStr.includes('tri') || typeStr.includes('3 axle') || typeStr.includes('3-axle')) {
-                      numAxles = 3;
-                    }
-
+                <div className="w-full px-4 mb-4">
+                  <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest mb-4 border-b-2 border-emerald-200 pb-1">
+                    {typeStr.includes('dolly') ? 'Dolly Unit (16 Tyres)' : 'Rear Unit (32 Tyres)'}
+                  </p>
+                  
+                  {Array.from({ length: numAxles }).map((_, index) => {
+                    const axleNum = index + 1;
                     return (
-                      <div key={trailer.id} className="flex flex-col items-center">
-                        <div className="h-8 w-4 bg-gray-800"></div>
-                        <div className="w-72 border-4 border-emerald-800 rounded pb-8 pt-4 bg-emerald-50 flex flex-col items-center shadow-xl relative">
-                          <button type="button" onClick={() => handleDrop(trailer.id)} className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">DROP</button>
-                          <div className="bg-emerald-800 text-white px-4 py-1 rounded text-xs font-black mb-6 uppercase tracking-widest">{trailer.fleet_number}</div>
-                          
-                          <div className="w-full px-6 mb-8">
-                            <div className="border-2 border-dashed border-emerald-400 rounded p-2 flex justify-center gap-2 relative bg-emerald-100/50">
-                              <span className="absolute -top-2.5 bg-emerald-50 px-2 text-[9px] font-bold text-emerald-700 uppercase tracking-widest rounded">Spare Carrier Racks</span>
-                              {renderTyreSlot(trailer.id, 'Spare 1')}
-                              {renderTyreSlot(trailer.id, 'Spare 2')}
-                            </div>
-                          </div>
-
-                          {Array.from({ length: numAxles }).map((_, index) => {
-                            const axleNum = index + 1;
-                            return (
-                              <div key={`axle-${axleNum}`} className="w-full flex justify-between relative mb-10 px-2 -mx-2">
-                                <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
-                                <div className="flex gap-1">
-                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - LO`)}
-                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - LI`)}
-                                </div>
-                                <div className="flex gap-1">
-                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - RI`)}
-                                  {renderTyreSlot(trailer.id, `Axle ${axleNum} - RO`)}
-                                </div>
-                              </div>
-                            );
-                          })}
+                      <div key={`axle-${axleNum}`} className="w-full flex justify-between relative mb-8">
+                        <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
+                        <div className="flex gap-0.5">
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - L4`)}
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - L3`)}
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - L2`)}
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - L1`)}
+                        </div>
+                        <div className="flex gap-0.5">
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - R1`)}
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - R2`)}
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - R3`)}
+                          {renderTyreSlot(trailer.id, `Axle ${axleNum} - R4`)}
                         </div>
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // ==========================================
+        // 🚛 LAYOUT B: STANDARD 4-TYRE WIDE
+        // ==========================================
+        return (
+          <div key={trailer.id} className="flex flex-col items-center">
+            <div className="h-8 w-4 bg-gray-800"></div>
+            <div className="w-72 border-4 border-emerald-800 rounded pb-8 pt-4 bg-emerald-50 flex flex-col items-center shadow-xl relative">
+              <button type="button" onClick={() => handleDrop(trailer.id)} className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-xs font-bold hover:bg-red-700">DROP</button>
+              
+              <div className="bg-emerald-800 text-white px-4 py-1 rounded text-xs font-black mb-6 uppercase tracking-widest">
+                {trailer.fleet_number}
+              </div>
+              
+              <div className="w-full px-6 mb-8">
+                <div className="border-2 border-dashed border-emerald-400 rounded p-2 flex justify-center gap-2 relative bg-emerald-100/50">
+                  <span className="absolute -top-2.5 bg-emerald-50 px-2 text-[9px] font-bold text-emerald-700 uppercase tracking-widest rounded">Spare Carrier Racks</span>
+                  {renderTyreSlot(trailer.id, 'Spare 1')}
+                  {renderTyreSlot(trailer.id, 'Spare 2')}
+                </div>
+              </div>
+
+              {Array.from({ length: numAxles }).map((_, index) => {
+                const axleNum = index + 1;
+                return (
+                  <div key={`axle-${axleNum}`} className="w-full flex justify-between relative mb-10 px-2 -mx-2">
+                    <div className="absolute top-4 left-0 w-full h-4 bg-gray-800"></div>
+                    <div className="flex gap-1">
+                      {renderTyreSlot(trailer.id, `Axle ${axleNum} - LO`)}
+                      {renderTyreSlot(trailer.id, `Axle ${axleNum} - LI`)}
+                    </div>
+                    <div className="flex gap-1">
+                      {renderTyreSlot(trailer.id, `Axle ${axleNum} - RI`)}
+                      {renderTyreSlot(trailer.id, `Axle ${axleNum} - RO`)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
                 </div>
               </div>
             ) : (

@@ -239,122 +239,138 @@ export default function FleetAssets({ companyId }) {
   };
 
   const executeHook = async () => {
-    // 🚀 FIXED: Robust validation that handles '0' and empty inputs correctly
-    const trailerSelected = hookData.trailerId && hookData.trailerId !== '';
-    const odoEntered = hookData.odometer !== '' && hookData.odometer !== null && hookData.odometer !== undefined;
-    
-    if (!trailerSelected || !odoEntered) {
-      return alert("Wait! Please make sure you have selected a trailer and entered the Odometer.");
-    }
+  // 🚀 FIXED: Robust validation that handles '0' and empty inputs correctly
+  const trailerSelected = hookData.trailerId && hookData.trailerId !== '';
+  const odoEntered = hookData.odometer !== '' && hookData.odometer !== null && hookData.odometer !== undefined;
+  
+  if (!trailerSelected || !odoEntered) {
+    return alert("Wait! Please make sure you have selected a trailer and entered the Odometer.");
+  }
 
-    if (hookData.isSuperlink && !hookData.trailer2Id) {
-      return alert("Please select the Rear Trailer for the Superlink.");
-    }
+  if (hookData.isSuperlink && !hookData.trailer2Id) {
+    return alert("Please select the Rear Trailer for the Superlink.");
+  }
 
-    // 🚀 THE CLONE BLOCKER
-    if (hookData.isSuperlink && String(hookData.trailerId) === String(hookData.trailer2Id)) {
-      return alert("SECURITY BLOCK: You cannot hook the same trailer to both the front and rear positions!");
-    }
+  // 🚀 THE CLONE BLOCKER
+  if (hookData.isSuperlink && String(hookData.trailerId) === String(hookData.trailer2Id)) {
+    return alert("SECURITY BLOCK: You cannot hook the same trailer to both the front and rear positions!");
+  }
 
-    const { error } = await supabase.from('vehicles').update({
-      hooked_trailer_id: hookData.trailerId,
-      hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
-      hook_odometer: parseFloat(hookData.odometer),
-      total_mileage: parseFloat(hookData.odometer) 
-    }).eq('id', selectedAsset.id).eq('company_id', companyId);
+  // 1. UPDATE THE TRUCK
+  const { error } = await supabase.from('vehicles').update({
+    hooked_trailer_id: hookData.trailerId,
+    hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
+    hook_odometer: parseFloat(hookData.odometer),
+    total_mileage: parseFloat(hookData.odometer) 
+  }).eq('id', selectedAsset.id).eq('company_id', companyId);
 
-    if (error) return alert(`DATABASE ERROR: Could not save hook. \n\nDetails: ${error.message}`);
+  if (error) return alert(`DATABASE ERROR: Could not save hook. \n\nDetails: ${error.message}`);
 
-    // SUCCESS
-    setIsHooking(false);
-    setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
-    await fetchFleet();
-    
-    const updatedTruck = assets.find(a => a.id === selectedAsset.id);
-    setSelectedAsset({
-      ...updatedTruck, 
-      hooked_trailer_id: hookData.trailerId, 
-      hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
-      hook_odometer: hookData.odometer
-    });
-    setWalkaroundOdo(hookData.odometer.toString()); 
-  };
+  // 2. 🚀 NEW: TELL THE TRAILERS THEIR POSITIONS!
+  // Stamp the front trailer as Position 1
+  await supabase.from('vehicles').update({ hook_position: 1 }).eq('id', hookData.trailerId);
+  
+  // Stamp the rear trailer as Position 2 (if it's a superlink)
+  if (hookData.isSuperlink && hookData.trailer2Id) {
+    await supabase.from('vehicles').update({ hook_position: 2 }).eq('id', hookData.trailer2Id);
+  }
+
+  // SUCCESS
+  setIsHooking(false);
+  setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
+  await fetchFleet();
+  
+  const updatedTruck = assets.find(a => a.id === selectedAsset.id);
+  setSelectedAsset({
+    ...updatedTruck, 
+    hooked_trailer_id: hookData.trailerId, 
+    hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
+    hook_odometer: hookData.odometer
+  });
+  setWalkaroundOdo(hookData.odometer.toString()); 
+};
 
   const executeDrop = async () => {
-    if (!dropOdometer) return alert("Enter the drop Odometer reading.");
-    setIsProcessingDrop(true);
+  if (!dropOdometer) return alert("Enter the drop Odometer reading.");
+  setIsProcessingDrop(true);
 
-    const startOdo = parseFloat(selectedAsset.hook_odometer || 0);
-    const endOdo = parseFloat(dropOdometer);
-    const tripDistance = endOdo - startOdo;
+  const startOdo = parseFloat(selectedAsset.hook_odometer || 0);
+  const endOdo = parseFloat(dropOdometer);
+  const tripDistance = endOdo - startOdo;
 
-    if (tripDistance < 0) {
-      setIsProcessingDrop(false);
-      return alert("Drop Odometer cannot be less than Hook Odometer!");
+  if (tripDistance < 0) {
+    setIsProcessingDrop(false);
+    return alert("Drop Odometer cannot be less than Hook Odometer!");
+  }
+
+  // ==========================================
+  // 🚀 NEW: PERMANENT TRIP LEDGER INSERT
+  // ==========================================
+  const { error: tripError } = await supabase.from('trips').insert([{
+    company_id: companyId,
+    distance_km: tripDistance,
+    trip_ref: `DROP-${selectedAsset.fleet_number}-${new Date().toISOString().split('T')[0]}`,
+    // Setting financial defaults to 0 so your math components don't break later
+    revenue: 0, cost_tolls: 0, cost_border: 0, cost_maintenance: 0, 
+    cost_tyres: 0, cost_driver: 0, cost_overhead: 0,
+    fuel_to_load: 0, fuel_to_depot: 0, fuel_to_border: 0, fuel_to_offload: 0, 
+    fuel_return_border: 0, fuel_return_depot: 0, fuel_price_per_litre: 0
+  }]);
+
+  if (tripError) {
+    console.error("Ledger Sync Warning:", tripError.message);
+    // We log it to the console rather than alerting the yard operator, 
+    // as they don't need to be blocked by an admin ledger error.
+  }
+  // ==========================================
+
+  const trailer1 = assets.find(a => a.id === selectedAsset.hooked_trailer_id);
+  if (trailer1) {
+    const newTrailerTotal = parseFloat(trailer1.total_mileage || 0) + tripDistance;
+    await supabase.from('vehicles').update({ 
+      total_mileage: newTrailerTotal,
+      hook_position: null // 🚀 NEW: Wipes the position clean so it doesn't stay as Position 1
+    }).eq('id', trailer1.id).eq('company_id', companyId);
+  }
+
+  if (selectedAsset.hooked_trailer_2_id) {
+    const trailer2 = assets.find(a => a.id === selectedAsset.hooked_trailer_2_id);
+    if (trailer2) {
+      const newTrailerTotal2 = parseFloat(trailer2.total_mileage || 0) + tripDistance;
+      await supabase.from('vehicles').update({ 
+        total_mileage: newTrailerTotal2,
+        hook_position: null // 🚀 NEW: Wipes the position clean so it doesn't stay as Position 2
+      }).eq('id', trailer2.id).eq('company_id', companyId);
     }
+  }
 
-    // ==========================================
-    // 🚀 NEW: PERMANENT TRIP LEDGER INSERT
-    // ==========================================
-    const { error: tripError } = await supabase.from('trips').insert([{
-      company_id: companyId,
-      distance_km: tripDistance,
-      trip_ref: `DROP-${selectedAsset.fleet_number}-${new Date().toISOString().split('T')[0]}`,
-      // Setting financial defaults to 0 so your math components don't break later
-      revenue: 0, cost_tolls: 0, cost_border: 0, cost_maintenance: 0, 
-      cost_tyres: 0, cost_driver: 0, cost_overhead: 0,
-      fuel_to_load: 0, fuel_to_depot: 0, fuel_to_border: 0, fuel_to_offload: 0, 
-      fuel_return_border: 0, fuel_return_depot: 0, fuel_price_per_litre: 0
-    }]);
+  const { error } = await supabase.from('vehicles').update({ 
+    hooked_trailer_id: null, 
+    hooked_trailer_2_id: null, 
+    hook_odometer: null, 
+    total_mileage: endOdo 
+  }).eq('id', selectedAsset.id).eq('company_id', companyId); 
 
-    if (tripError) {
-      console.error("Ledger Sync Warning:", tripError.message);
-      // We log it to the console rather than alerting the yard operator, 
-      // as they don't need to be blocked by an admin ledger error.
-    }
-    // ==========================================
+  if (error) {
+    setIsProcessingDrop(false);
+    return alert(`DATABASE ERROR: Could not release kingpin. \n\nDetails: ${error.message}`);
+  }
 
-    const trailer1 = assets.find(a => a.id === selectedAsset.hooked_trailer_id);
-    if (trailer1) {
-      const newTrailerTotal = parseFloat(trailer1.total_mileage || 0) + tripDistance;
-      await supabase.from('vehicles').update({ total_mileage: newTrailerTotal }).eq('id', trailer1.id).eq('company_id', companyId);
-    }
+  // Show the success badge
+  setTripResult(tripDistance);
+  
+  await fetchFleet();
+  setSelectedAsset({...selectedAsset, hooked_trailer_id: null, hooked_trailer_2_id: null, hook_odometer: null});
+  setWalkaroundOdo(endOdo.toString()); 
 
-    if (selectedAsset.hooked_trailer_2_id) {
-      const trailer2 = assets.find(a => a.id === selectedAsset.hooked_trailer_2_id);
-      if (trailer2) {
-        const newTrailerTotal2 = parseFloat(trailer2.total_mileage || 0) + tripDistance;
-        await supabase.from('vehicles').update({ total_mileage: newTrailerTotal2 }).eq('id', trailer2.id).eq('company_id', companyId);
-      }
-    }
-
-    const { error } = await supabase.from('vehicles').update({ 
-      hooked_trailer_id: null, 
-      hooked_trailer_2_id: null, 
-      hook_odometer: null, 
-      total_mileage: endOdo 
-    }).eq('id', selectedAsset.id).eq('company_id', companyId); 
-
-    if (error) {
-      setIsProcessingDrop(false);
-      return alert(`DATABASE ERROR: Could not release kingpin. \n\nDetails: ${error.message}`);
-    }
-
-    // Show the success badge
-    setTripResult(tripDistance);
-    
-    await fetchFleet();
-    setSelectedAsset({...selectedAsset, hooked_trailer_id: null, hooked_trailer_2_id: null, hook_odometer: null});
-    setWalkaroundOdo(endOdo.toString()); 
-
-    // Auto-close the UI after 3.5 seconds
-    setTimeout(() => {
-      setIsDropping(false);
-      setDropOdometer('');
-      setTripResult(null);
-      setIsProcessingDrop(false);
-    }, 3500);
-  };
+  // Auto-close the UI after 3.5 seconds
+  setTimeout(() => {
+    setIsDropping(false);
+    setDropOdometer('');
+    setTripResult(null);
+    setIsProcessingDrop(false);
+  }, 3500);
+};
 const executeCloseTrip = async () => {
     if (!tripOdometer) return alert("Enter the ending Odometer reading.");
     setIsProcessingTrip(true);
@@ -659,18 +675,23 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
                   <div>
                     <label className="block text-gray-400 font-bold text-xs uppercase tracking-wider mb-2">Asset Type</label>
                     <select 
-                      value={newAsset.asset_type} 
-                      onChange={(e) => setNewAsset({...newAsset, asset_type: e.target.value})} 
-                      className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-black text-white uppercase focus:border-indigo-500 outline-none"
-                    >
-                      <option value="Power Unit">Power Unit</option>
-                      <option value="Rigid (4x2)">Rigid 4 or 8-Tonner (6 Tyres)</option>
-                      <option value="Bakkie (4x2)">Bakkie / LDV (4 Tyres)</option>
-                      <option value="Trailer">Standard Flat Deck (2 Axle)</option>
-                      <option value="3-Axle Trailer">Tri-axle Flat Deck (3 Axle)</option>
-                      <option value="4-Axle Trailer">Abnormal Flat Deck (4 Axle)</option>
-                      <option value="6-Axle Modular Trailer">6-Axle Modular Trailer (48 Tyres)</option>
-                    </select>
+  value={newAsset.asset_type} 
+  onChange={(e) => setNewAsset({...newAsset, asset_type: e.target.value})} 
+  className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-lg font-black text-white uppercase focus:border-indigo-500 outline-none"
+>
+  <option value="Power Unit">Power Unit</option>
+  <option value="Rigid (4x2)">Rigid 4 or 8-Tonner (6 Tyres)</option>
+  <option value="Bakkie (4x2)">Bakkie / LDV (4 Tyres)</option>
+  
+  {/* STANDARD TRAILERS (4 Tyres Across) */}
+  <option value="Trailer">Standard Flat Deck (2 Axle)</option>
+  <option value="3-Axle Trailer">Tri-axle Flat Deck (3 Axle)</option>
+  <option value="4-Axle Trailer">Abnormal Flat Deck (4 Axle, 16 Tyres)</option>
+  
+  {/* 🚀 MODULAR TRAILERS (8 Tyres Across) */}
+  <option value="Dolly">Abnormal Dolly (2-Axle, 16 Tyres)</option>
+  <option value="4-Axle Modular 32-Tyre">Modular Rear Deck (4-Axle, 32 Tyres)</option>
+</select>
                   </div>
                   <div className="flex gap-2 mt-4 pt-2 border-t border-gray-700">
                     <button type="button" onClick={() => setIsAddingAsset(false)} className="flex-1 py-4 bg-gray-700 text-white rounded-xl font-black uppercase active:bg-gray-600">Cancel</button>
