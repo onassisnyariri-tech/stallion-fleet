@@ -5,8 +5,10 @@ export default function Drivers({ companyId }) {
   const [drivers, setDrivers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   // 🚀 1. ADD THE SEARCH STATE
-  const [searchTerm, setSearchTerm] = useState('');
-  
+const [searchTerm, setSearchTerm] = useState('');
+
+// 🚀 NEW: ADD STATUS FILTER (Defaults to 'ACTIVE')
+const [statusFilter, setStatusFilter] = useState('ACTIVE');
   // 🚀 2. ADD THE DASHBOARD MEMORY LISTENER
   useEffect(() => {
     const autoSearch = sessionStorage.getItem('stc_auto_search');
@@ -22,8 +24,9 @@ export default function Drivers({ companyId }) {
   
   const initialFormState = {
     first_name: '', last_name: '', employee_id: '', 
-    phone_number: '', phone_number_2: '', // <-- ADDED 2ND PHONE
-    date_of_birth: '', // <-- ADDED DOB
+    phone_number: '', phone_number_2: '', 
+    date_of_birth: '', 
+    address: '', // 🚀 ADDED ADDRESS HERE
     status: 'ACTIVE', date_of_hire: '',
     blood_type: '', medical_allergies: '', emergency_contact_name: '', emergency_contact_phone: '', emergency_contact_relation: '',
     license_number: '', license_type: 'EC', license_country: 'South Africa', license_issue_date: '', license_expiry_date: '',
@@ -145,12 +148,17 @@ export default function Drivers({ companyId }) {
   };
 
   if (isLoading) return <div className="p-10 text-center text-gray-500 font-bold animate-pulse">Loading Driver Roster...</div>;
-  // 🚀 3. FILTER THE LIST BEFORE RENDERING
+// 🚀 FILTER DRIVERS BY SEARCH AND STATUS
   const filteredDrivers = drivers.filter(driver => {
-    const fullName = `${driver.first_name} ${driver.last_name}`.toLowerCase();
-    return fullName.includes(searchTerm.toLowerCase());
+    // 1. Check if it matches the search bar
+    const searchString = `${driver.first_name} ${driver.last_name} ${driver.employee_id || ''}`.toLowerCase();
+    const matchesSearch = searchString.includes(searchTerm.toLowerCase());
+    
+    // 2. Check if it matches the dropdown (or if 'ALL' is selected)
+    const matchesStatus = statusFilter === 'ALL' || driver.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
   });
-
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
       
@@ -161,23 +169,39 @@ export default function Drivers({ companyId }) {
           <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mt-1">Personnel & Compliance Roster</p>
         </div>
         
-        {/* 🚀 NEW: SEARCH & ADD BUTTON CONTAINER */}
-        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-          <input 
-            type="text" 
-            placeholder="Search drivers..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="px-4 py-3 border rounded-xl bg-gray-50 font-medium outline-none focus:border-indigo-500 w-full sm:min-w-62.5"
-          />
-          
-          <button 
-            onClick={() => openModal()} 
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-sm shadow-md transition-colors whitespace-nowrap"
-          >
-            + Add Driver
-          </button>
-        </div>
+        {/* 🚀 NEW: SEARCH, FILTER & ADD BUTTON CONTAINER */}
+<div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+  
+  {/* Search Bar */}
+  <input 
+    type="text" 
+    placeholder="Search drivers..." 
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    className="px-4 py-3 border rounded-xl bg-gray-50 font-medium outline-none focus:border-indigo-500 w-full sm:min-w-62.5"
+  />
+  
+  {/* 🚀 NEW: STATUS FILTER DROPDOWN */}
+  <select
+    value={statusFilter}
+    onChange={(e) => setStatusFilter(e.target.value)}
+    className="px-4 py-3 border rounded-xl bg-gray-50 font-bold text-gray-700 outline-none focus:border-indigo-500 cursor-pointer"
+  >
+    <option value="ACTIVE">Active Only</option>
+    <option value="ON LEAVE">On Leave</option>
+    <option value="SUSPENDED">Suspended</option>
+    <option value="TERMINATED">Terminated</option>
+    <option value="ALL">All Statuses</option>
+  </select>
+  
+  {/* Add Button */}
+  <button 
+    onClick={() => openModal()} 
+    className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-sm shadow-md transition-colors whitespace-nowrap"
+  >
+    + Add Driver
+  </button>
+</div>
       </div>
       
 
@@ -268,6 +292,12 @@ export default function Drivers({ companyId }) {
                   
                   <div><label className="block text-xs font-bold text-gray-500 mb-1">Primary Phone</label><input name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
                   <div><label className="block text-xs font-bold text-gray-500 mb-1">Alternate Phone</label><input name="phone_number_2" placeholder="e.g. Zim/SA Roaming" value={formData.phone_number_2 || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+                  
+                  {/* 🚀 NEW: PHYSICAL ADDRESS (Spans 2 columns for extra width) */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-500 mb-1">Physical Address</label>
+                    <input name="address" placeholder="123 Main St, Suburb, City" value={formData.address || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" />
+                  </div>
                   
                   <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">Status</label>
