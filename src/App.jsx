@@ -170,7 +170,7 @@ useEffect(() => {
   {hasFeature('yard') && permissions?.canAccessYard && <button onClick={() => setActiveTab('yard')} style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`px-4 py-2 rounded-lg text-sm font-bold uppercase transition-colors shrink-0 ${activeTab !== 'yard' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : ''}`}>Yard App</button>}
   
   {/* 🚀 DESKTOP DISPATCH TAB */}
-{hasFeature('dispatch') && permissions?.canAccessDispatch && (
+{hasFeature('dispatch') && (permissions?.canAccessDispatch || permissions?.canAccessAdminSettings) && (
   <button 
     onClick={() => setActiveTab('dispatch')} 
     style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} 
@@ -279,7 +279,7 @@ useEffect(() => {
   </button>
 )}
 {/* 🚀 MOBILE DISPATCH TAB */}
-{hasFeature('dispatch') && permissions?.canAccessFinancials && (
+{hasFeature('dispatch') && (permissions?.canAccessDispatch || permissions?.canAccessAdminSettings) && (
   <button 
     onClick={() => setActiveTab('dispatch')} 
     style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} 
