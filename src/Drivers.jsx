@@ -21,6 +21,29 @@ const [statusFilter, setStatusFilter] = useState('ACTIVE');
   // Modal & Form State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  // 🚀 HISTORY MODAL STATE
+const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+const [historyData, setHistoryData] = useState([]);
+const [selectedHistoryDriver, setSelectedHistoryDriver] = useState(null);
+const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+// 🚀 FETCH DRIVER HISTORY
+const openHistoryModal = async (driver) => {
+  setSelectedHistoryDriver(driver);
+  setIsHistoryModalOpen(true);
+  setIsLoadingHistory(true);
+
+  const { data, error } = await supabase
+    .from('driver_status_history')
+    .select('*')
+    .eq('driver_id', driver.id)
+    .order('start_date', { ascending: false }); // Newest first
+
+  if (error) console.error("Error fetching history:", error);
+  else setHistoryData(data || []);
+  
+  setIsLoadingHistory(false);
+};
   
   const initialFormState = {
     first_name: '', last_name: '', employee_id: '', 
@@ -92,7 +115,7 @@ const [statusFilter, setStatusFilter] = useState('ACTIVE');
     setIsModalOpen(true);
   };
 
-  // Save Driver
+ // Save Driver
   const handleSave = async (e) => {
     e.preventDefault();
     const payload = { ...formData, company_id: companyId };
@@ -102,13 +125,48 @@ const [statusFilter, setStatusFilter] = useState('ACTIVE');
       if (payload[key] === '') payload[key] = null;
     });
 
+    let currentDriverId = editingId;
+    let statusChanged = false;
+
     if (editingId) {
+      // 🚀 Check if the status actually changed by looking at the existing driver list
+      const originalDriver = drivers.find(d => d.id === editingId);
+      if (originalDriver && originalDriver.status !== payload.status) {
+        statusChanged = true;
+      }
+
       const { error } = await supabase.from('drivers').update(payload).eq('id', editingId).eq('company_id', companyId);
-      if (error) alert("Error updating driver: " + error.message);
+      if (error) {
+        alert("Error updating driver: " + error.message);
+        return; // Stop here if it fails
+      }
     } else {
-      const { error } = await supabase.from('drivers').insert([payload]);
-      if (error) alert("Error adding driver: " + error.message);
-      else localStorage.removeItem('stc_driver_draft'); // 🚀 WIPE DRAFT ON SUCCESS
+      // 🚀 Always log the initial status for brand new drivers
+      statusChanged = true; 
+      
+      // We add .select() here to immediately get the newly generated ID back from the database
+      const { data, error } = await supabase.from('drivers').insert([payload]).select();
+      
+      if (error) {
+        alert("Error adding driver: " + error.message);
+        return; // Stop here if it fails
+      } else {
+        currentDriverId = data[0].id;
+        localStorage.removeItem('stc_driver_draft'); // WIPE DRAFT ON SUCCESS
+      }
+    }
+    
+    // 🚀 NEW: LOG TO THE HISTORY TABLE IF THE STATUS CHANGED
+    if (statusChanged && currentDriverId) {
+      const { error: historyError } = await supabase
+        .from('driver_status_history')
+        .insert([{
+          driver_id: currentDriverId,
+          status: payload.status,
+          start_date: new Date().toISOString().split('T')[0] // Stamps today's date automatically
+        }]);
+        
+      if (historyError) console.error("Error logging status history:", historyError.message);
     }
     
     setIsModalOpen(false);
@@ -259,10 +317,11 @@ const [statusFilter, setStatusFilter] = useState('ACTIVE');
                   )}
                 </div>
                 
-                <div className="p-3 bg-gray-50 border-t border-gray-100 grid grid-cols-2 gap-2">
-                  <button onClick={() => openModal(driver)} className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 px-3 py-2 rounded font-bold text-xs uppercase tracking-widest">Edit</button>
-                  <button onClick={() => handleDelete(driver.id, `${driver.first_name} ${driver.last_name}`)} className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 rounded font-bold text-xs uppercase tracking-widest">Delete</button>
-                </div>
+                <div className="p-3 bg-gray-50 border-t border-gray-100 grid grid-cols-3 gap-2">
+  <button onClick={() => openHistoryModal(driver)} className="bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 px-3 py-2 rounded font-bold text-xs uppercase tracking-widest">History</button>
+  <button onClick={() => openModal(driver)} className="bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 px-3 py-2 rounded font-bold text-xs uppercase tracking-widest">Edit</button>
+  <button onClick={() => handleDelete(driver.id, `${driver.first_name} ${driver.last_name}`)} className="bg-white border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 rounded font-bold text-xs uppercase tracking-widest">Delete</button>
+</div>
               </div>
             );
           })}
@@ -370,6 +429,58 @@ const [statusFilter, setStatusFilter] = useState('ACTIVE');
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+      {/* 🚀 NEW: HISTORY MODAL */}
+      {isHistoryModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-60">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div className="bg-gray-900 p-4 flex justify-between items-center shrink-0">
+              <h2 className="text-lg font-black text-white uppercase tracking-widest">
+                {selectedHistoryDriver?.first_name} {selectedHistoryDriver?.last_name}
+              </h2>
+              <button onClick={() => setIsHistoryModalOpen(false)} className="text-gray-400 hover:text-white font-bold text-xl leading-none">&times;</button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6">Status History Timeline</h3>
+              
+              {isLoadingHistory ? (
+                <p className="text-center text-gray-500 font-bold py-8">Loading timeline...</p>
+              ) : historyData.length === 0 ? (
+                <p className="text-center text-gray-400 italic py-8">No status changes recorded yet.</p>
+              ) : (
+                <div className="relative border-l-2 border-gray-200 ml-3 space-y-8 pb-4">
+                  {historyData.map((event, idx) => (
+                    <div key={idx} className="relative pl-6">
+                      {/* Timeline Dot */}
+                      <span className={`absolute -left-2.25 top-1 w-4 h-4 rounded-full border-2 border-white 
+                        ${event.status === 'ACTIVE' ? 'bg-green-500' : 
+                          event.status === 'ON LEAVE' ? 'bg-blue-500' : 
+                          event.status === 'SUSPENDED' ? 'bg-red-500' : 'bg-gray-500'}`} 
+                      />
+                      
+                      <div className="flex flex-col">
+                        <span className="text-xs font-black text-gray-400 mb-1">{event.start_date}</span>
+                        <span className={`text-sm font-bold uppercase tracking-wide
+                          ${event.status === 'ACTIVE' ? 'text-green-700' : 
+                            event.status === 'ON LEAVE' ? 'text-blue-700' : 
+                            event.status === 'SUSPENDED' ? 'text-red-700' : 'text-gray-700'}`}>
+                          Changed to: {event.status}
+                        </span>
+                        {event.reason && <span className="text-sm text-gray-600 mt-1">{event.reason}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="bg-gray-50 p-4 border-t flex justify-end shrink-0">
+              <button onClick={() => setIsHistoryModalOpen(false)} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-bold text-sm uppercase tracking-wider">Close</button>
+            </div>
           </div>
         </div>
       )}
