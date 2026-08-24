@@ -12,6 +12,13 @@ export default function FleetAssets({ companyId }) {
   const [sideFilter, setSideFilter] = useState('ALL'); 
   const [isAddingAsset, setIsAddingAsset] = useState(false);
   const [newAsset, setNewAsset] = useState({ fleet_number: '', asset_type: 'Power Unit' });
+ // 🚀 NEW: EDIT ASSET STATE
+const [isEditingAsset, setIsEditingAsset] = useState(false);
+const [editAssetData, setEditAssetData] = useState({ fleet_number: '', registration_number: '' });
+// 🚀 NEW: ODOMETER HISTORY STATE
+const [showOdoHistory, setShowOdoHistory] = useState(false);
+const [odoHistoryData, setOdoHistoryData] = useState([]);
+const [isFetchingOdoHistory, setIsFetchingOdoHistory] = useState(false);
   // 🚀 NEW: SEARCH & FILTER STATE
   const [searchQuery, setSearchQuery] = useState('');
   const [assetFilter, setAssetFilter] = useState('ALL'); // 'ALL', 'POWER', 'TRAILER'
@@ -90,35 +97,73 @@ export default function FleetAssets({ companyId }) {
       setAssets([]);
     }
   };
-//// 🚀 FIXED: INDEPENDENT ODOMETER UPDATE
-  const handleQuickOdometerUpdate = async (vehicleId, newOdometerValue) => {
-    if (!newOdometerValue) return;
+// 🚀 FIXED: INDEPENDENT ODOMETER UPDATE (WITH AUDIT LEDGER)
+const handleQuickOdometerUpdate = async (vehicleId, newOdometerValue) => {
+  if (!newOdometerValue) return;
 
-    const numericOdo = parseFloat(newOdometerValue);
+  const numericOdo = parseFloat(newOdometerValue);
+  
+  // 🚀 NEW: Grab the old odometer reading before we change it!
+  const vehicle = assets.find(v => v.id === vehicleId);
+  const oldOdo = vehicle ? parseFloat(vehicle.total_mileage || 0) : 0;
 
-    // 1. Optimistic UI Update (Updates the background fleet array)
-    setAssets(prevAssets => 
-      prevAssets.map(v => 
-        v.id === vehicleId ? { ...v, total_mileage: numericOdo } : v
-      )
-    );
+  // 1. Optimistic UI Update (Updates the background fleet array)
+  setAssets(prevAssets => 
+    prevAssets.map(v => 
+      v.id === vehicleId ? { ...v, total_mileage: numericOdo } : v
+    )
+  );
 
-    // 2. Optimistic UI Update (Updates the actively selected truck)
-    if (selectedAsset && selectedAsset.id === vehicleId) {
-      setSelectedAsset(prev => ({ ...prev, total_mileage: numericOdo }));
-    }
+  // 2. Optimistic UI Update (Updates the actively selected truck)
+  if (selectedAsset && selectedAsset.id === vehicleId) {
+    setSelectedAsset(prev => ({ ...prev, total_mileage: numericOdo }));
+  }
 
-    // 3. Background Database Update
-    const { error } = await supabase
-      .from('vehicles')
-      .update({ total_mileage: numericOdo }) // 🚀 FIXED: Matches the rest of your app!
-      .eq('id', vehicleId)
-      .eq('company_id', companyId); // 🚀 SECURED: Added the SaaS Lock
+  // 3. Background Database Update
+  const { error } = await supabase
+    .from('vehicles')
+    .update({ total_mileage: numericOdo }) 
+    .eq('id', vehicleId)
+    .eq('company_id', companyId); 
 
-    if (error) {
-      alert("Failed to update odometer: " + error.message);
-    }
-  };
+  if (error) {
+    alert("Failed to update odometer: " + error.message);
+    return; // Stop here if the update failed
+  }
+
+  // 4. 🚀 NEW: WRITE TO THE AUDIT LEDGER
+  if (numericOdo !== oldOdo) {
+    const { error: auditError } = await supabase.from('vehicle_odometer_history').insert([{
+      company_id: companyId,
+      vehicle_id: vehicleId,
+      previous_odo: oldOdo,
+      new_odo: numericOdo,
+      source: 'MANUAL_WALKAROUND_EDIT'
+    }]);
+    
+    if (auditError) console.error("Failed to log odometer history:", auditError);
+  }
+};
+// ==========================================
+// 🚀 NEW: FETCH ODOMETER HISTORY
+// ==========================================
+const fetchOdoHistory = async () => {
+  setIsFetchingOdoHistory(true);
+  setShowOdoHistory(true);
+  
+  const { data, error } = await supabase
+    .from('vehicle_odometer_history')
+    .select('*')
+    .eq('vehicle_id', selectedAsset.id)
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+    .limit(10); // Show the last 10 changes
+
+  if (!error) {
+    setOdoHistoryData(data || []);
+  }
+  setIsFetchingOdoHistory(false);
+};
 
   useEffect(() => {
     // 🚀 HARD RESET: Wipe the old company's assets and trips from the screen
@@ -231,6 +276,38 @@ export default function FleetAssets({ companyId }) {
       await fetchFleet(); // Refresh the fleet array
     }
   };
+ // ==========================================
+// 🚀 NEW: EDIT ASSET FUNCTION
+// ==========================================
+const handleUpdateAsset = async (e) => {
+  e.preventDefault();
+  
+  const formattedFleetNumber = editAssetData.fleet_number ? editAssetData.fleet_number.trim().toUpperCase() : '';
+  const formattedReg = editAssetData.registration_number ? editAssetData.registration_number.trim().toUpperCase() : '';
+
+  const { error } = await supabase
+    .from('vehicles')
+    .update({ 
+      fleet_number: formattedFleetNumber,
+      registration_number: formattedReg // 🚀 FIXED: Matches your DB!
+    })
+    .eq('id', selectedAsset.id)
+    .eq('company_id', companyId); // SaaS Lock
+
+  if (error) {
+    alert("Database Error: Could not update asset. " + error.message);
+  } else {
+    setIsEditingAsset(false);
+    // Refresh the selected asset state instantly so the header updates
+    setSelectedAsset(prev => ({
+      ...prev, 
+      fleet_number: formattedFleetNumber, 
+      registration_number: formattedReg // 🚀 FIXED
+    }));
+    await fetchFleet(); 
+    alert("✅ Asset details updated successfully!");
+  }
+};
 
   const startHook = () => {
     const trailers = assets.filter(a => a.asset_type === 'Trailer');
@@ -355,6 +432,40 @@ export default function FleetAssets({ companyId }) {
     setIsProcessingDrop(false);
     return alert(`DATABASE ERROR: Could not release kingpin. \n\nDetails: ${error.message}`);
   }
+  // ==========================================
+  // 🚀 NEW: WRITE TO THE AUDIT LEDGER (DROP)
+  // ==========================================
+  const auditLogs = [];
+  
+  // 1. Log the Truck
+  auditLogs.push({
+    company_id: companyId, vehicle_id: selectedAsset.id,
+    previous_odo: parseFloat(selectedAsset.total_mileage || 0), new_odo: endOdo,
+    source: 'TRAILER_DROP'
+  });
+  
+  // 2. Log Trailer 1
+  if (trailer1) {
+    auditLogs.push({
+      company_id: companyId, vehicle_id: trailer1.id,
+      previous_odo: parseFloat(trailer1.total_mileage || 0), new_odo: parseFloat(trailer1.total_mileage || 0) + tripDistance,
+      source: 'TRAILER_DROP'
+    });
+  }
+  
+  // 3. Log Trailer 2
+  if (selectedAsset.hooked_trailer_2_id) {
+    const trailer2 = assets.find(a => a.id === selectedAsset.hooked_trailer_2_id);
+    if (trailer2) {
+      auditLogs.push({
+        company_id: companyId, vehicle_id: trailer2.id,
+        previous_odo: parseFloat(trailer2.total_mileage || 0), new_odo: parseFloat(trailer2.total_mileage || 0) + tripDistance,
+        source: 'TRAILER_DROP'
+      });
+    }
+  }
+
+  await supabase.from('vehicle_odometer_history').insert(auditLogs);
 
   // Show the success badge
   setTripResult(tripDistance);
@@ -409,6 +520,37 @@ const executeCloseTrip = async () => {
       total_mileage: endOdo,
       hook_odometer: endOdo // <-- This is the magic reset!
     }).eq('id', selectedAsset.id).eq('company_id', companyId); 
+    // ==========================================
+  // 🚀 NEW: WRITE TO THE AUDIT LEDGER (ROUND TRIP)
+  // ==========================================
+  const auditLogs = [];
+  
+  auditLogs.push({
+    company_id: companyId, vehicle_id: selectedAsset.id,
+    previous_odo: parseFloat(selectedAsset.total_mileage || 0), new_odo: endOdo,
+    source: 'ROUND_TRIP_LOGGED'
+  });
+  
+  if (trailer1) {
+    auditLogs.push({
+      company_id: companyId, vehicle_id: trailer1.id,
+      previous_odo: parseFloat(trailer1.total_mileage || 0), new_odo: parseFloat(trailer1.total_mileage || 0) + tripDistance,
+      source: 'ROUND_TRIP_LOGGED'
+    });
+  }
+  
+  if (selectedAsset.hooked_trailer_2_id) {
+    const trailer2 = assets.find(a => a.id === selectedAsset.hooked_trailer_2_id);
+    if (trailer2) {
+      auditLogs.push({
+        company_id: companyId, vehicle_id: trailer2.id,
+        previous_odo: parseFloat(trailer2.total_mileage || 0), new_odo: parseFloat(trailer2.total_mileage || 0) + tripDistance,
+        source: 'ROUND_TRIP_LOGGED'
+      });
+    }
+  }
+
+  await supabase.from('vehicle_odometer_history').insert(auditLogs);
 
     // Show the success badge using the same tripResult state
     setTripResult(tripDistance);
@@ -771,7 +913,7 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
                   <>
                     <label className="block text-indigo-400 font-black uppercase tracking-wider text-xs mb-2">Current Dash Odo (km) *</label>
                     
-                    {/* 🚀 NEW: FLEX WRAPPER FOR INPUT + SAVE BUTTON */}
+                    {/* 🚀 FLEX WRAPPER FOR INPUT + SAVE BUTTON */}
                     <div className="flex gap-2">
                       <input 
                         type="number" 
@@ -782,17 +924,8 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
                       />
                       <button 
                         onClick={() => {
-                          // Fire the function using the state you already have!
                           handleQuickOdometerUpdate(selectedAsset.id, walkaroundOdo);
-                          
-                          // Quick green flash for visual success
-                          const btn = document.getElementById('btn-odo-save');
-                          btn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
-                          btn.classList.add('bg-green-600');
-                          setTimeout(() => {
-                            btn.classList.remove('bg-green-600');
-                            btn.classList.add('bg-indigo-600', 'hover:bg-indigo-500');
-                          }, 1000);
+                          // (Your green flash animation code is here...)
                         }}
                         id="btn-odo-save"
                         className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg active:scale-95 shrink-0"
@@ -800,6 +933,11 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
                         Save
                       </button>
                     </div>
+
+                    {/* 🚀 PASTE THE NEW BUTTON EXACTLY HERE, RIGHT UNDER THAT </div> */}
+                    <button onClick={fetchOdoHistory} className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest mt-3 hover:text-indigo-300 transition-colors flex items-center gap-1">
+                      📜 VIEW ODOMETER HISTORY
+                    </button>
                   </>
                 ) : (
                   <>
@@ -1101,16 +1239,30 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
               </div>
            ))}
 
-            {/* 🚀 DANGER ZONE: DELETE ASSET BUTTON */}
-            <div className="mt-12 mb-4 border-t-2 border-red-900/30 pt-8 text-center animate-fade-in">
-              <button 
-                onClick={() => handleDeleteAsset(selectedAsset.id, selectedAsset.fleet_number)}
-                className="bg-red-900/20 text-red-500 border border-red-900/50 hover:bg-red-600 hover:text-white px-8 py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-colors shadow-lg active:scale-95"
-              >
-                🗑️ DELETE {selectedAsset.fleet_number}
-              </button>
-              <p className="text-gray-500 text-xs font-bold mt-3 uppercase tracking-widest">Warning: This action cannot be undone</p>
-            </div>
+            {/* 🚀 SETTINGS / DANGER ZONE: EDIT & DELETE ASSET BUTTONS */}
+        <div className="mt-12 mb-4 border-t-2 border-gray-700 pt-8 animate-fade-in">
+          <div className="grid grid-cols-2 gap-4 max-w-lg mx-auto">
+            <button 
+              onClick={() => {
+                setEditAssetData({ 
+                  fleet_number: selectedAsset.fleet_number || '', 
+                  registration_number: selectedAsset.registration_number || '' // 🚀 FIXED
+                });
+                setIsEditingAsset(true);
+              }}
+              className="bg-gray-800 text-indigo-400 border border-gray-700 hover:border-indigo-500 px-4 py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-colors shadow-lg active:scale-95 flex items-center justify-center gap-2"
+            >
+              ⚙️ EDIT ASSET
+            </button>
+            <button 
+              onClick={() => handleDeleteAsset(selectedAsset.id, selectedAsset.fleet_number)}
+              className="bg-red-900/20 text-red-500 border border-red-900/50 hover:bg-red-600 hover:text-white px-4 py-4 rounded-xl font-black uppercase tracking-widest text-sm transition-colors shadow-lg active:scale-95 flex items-center justify-center gap-2"
+            >
+              🗑️ DELETE
+            </button>
+          </div>
+          <p className="text-gray-600 text-[10px] font-bold mt-4 uppercase tracking-widest text-center">Settings for {selectedAsset.fleet_number}</p>
+        </div>
 
           </div>
         )}
@@ -1153,6 +1305,91 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
           </div>
         </div>
       )}
+      {/* ==========================================
+      🚀 NEW: EDIT ASSET MODAL 
+  ========================================== */}
+  {isEditingAsset && (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-100 flex items-center justify-center p-4 animate-fade-in text-gray-900">
+      <div className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border-2 border-gray-600">
+        <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700">
+          <h3 className="text-indigo-400 font-black tracking-widest uppercase text-sm">
+            Edit Asset Details
+          </h3>
+          <button onClick={() => setIsEditingAsset(false)} className="text-gray-500 hover:text-white font-bold text-2xl leading-none">✕</button>
+        </div>
+        
+        <form onSubmit={handleUpdateAsset} className="p-6 space-y-5">
+          <div>
+            <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Fleet Number *</label>
+            <input 
+              type="text"
+              required
+              value={editAssetData.fleet_number} 
+              onChange={e => setEditAssetData({...editAssetData, fleet_number: e.target.value})} 
+              className="w-full p-4 bg-gray-900 border-2 border-gray-700 rounded-xl focus:border-indigo-500 outline-none text-xl text-white font-black uppercase shadow-inner" 
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Registration Plate (Opt)</label>
+            <input 
+              type="text"
+              value={editAssetData.registration} 
+              onChange={e => setEditAssetData({...editAssetData, registration: e.target.value})} 
+              className="w-full p-4 bg-gray-900 border-2 border-gray-700 rounded-xl focus:border-indigo-500 outline-none text-xl text-white font-black uppercase shadow-inner" 
+            />
+          </div>
+
+          <div className="pt-4 flex gap-3">
+            <button type="button" onClick={() => setIsEditingAsset(false)} className="flex-1 py-4 bg-gray-700 text-gray-300 rounded-xl font-black uppercase tracking-widest active:bg-gray-600 transition-colors">Cancel</button>
+            <button type="submit" className="flex-2 py-4 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest active:scale-[0.98] transition-all shadow-lg hover:bg-indigo-500">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )}
+  {/* ==========================================
+      🚀 NEW: ODOMETER HISTORY MODAL 
+  ========================================== */}
+  {showOdoHistory && (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-100 flex items-center justify-center p-4 animate-fade-in text-gray-900">
+      <div className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border-2 border-gray-600 flex flex-col max-h-[80vh]">
+        <div className="bg-gray-900 p-5 flex justify-between items-center border-b border-gray-700 shrink-0">
+          <h3 className="text-indigo-400 font-black tracking-widest uppercase text-sm">
+            Odometer History: {selectedAsset?.fleet_number}
+          </h3>
+          <button onClick={() => setShowOdoHistory(false)} className="text-gray-500 hover:text-white font-bold text-2xl leading-none">✕</button>
+        </div>
+        
+        <div className="p-4 overflow-y-auto space-y-3">
+          {isFetchingOdoHistory ? (
+            <p className="text-gray-500 text-center text-sm font-bold animate-pulse py-8">Loading secure ledger...</p>
+          ) : odoHistoryData.length === 0 ? (
+            <p className="text-gray-500 text-center text-sm font-bold py-8 border border-gray-700 border-dashed rounded-xl">No history logged for this asset yet.</p>
+          ) : (
+            odoHistoryData.map((log) => (
+              <div key={log.id} className="bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-inner flex flex-col gap-2">
+                <div className="flex justify-between items-start border-b border-gray-800 pb-2">
+                  <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">{log.source.replace(/_/g, ' ')}</span>
+                  <span className="text-[10px] font-bold text-gray-500 uppercase">{new Date(log.created_at).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">Previous</span>
+                    <span className="text-gray-400 font-bold line-through decoration-red-500/50">{Number(log.previous_odo).toLocaleString()} km</span>
+                  </div>
+                  <span className="text-gray-600 font-bold">➔</span>
+                  <div className="flex flex-col text-right">
+                    <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider mb-1">New Odo</span>
+                    <span className="text-white font-black text-lg leading-none">{Number(log.new_odo).toLocaleString()} km</span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  )}
     </div>
   );
 }
