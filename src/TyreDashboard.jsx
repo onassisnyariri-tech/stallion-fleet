@@ -371,22 +371,23 @@ export default function TyreDashboard({ companyId }) {
   const tyre = tyres.find(t => t.id === tyreId);
   const targetVehicle = vehicles.find(v => String(v.id) === String(mountingSlot.vehicleId));
   
-  // 1. Get the truck's current odometer (fallback to 0 if missing)
-  const truckOdo = targetVehicle?.odometer || 0;
+  // 1. Get the truck's current odometer (checks both column names just in case)
+  const truckOdo = targetVehicle?.total_mileage || targetVehicle?.odometer || 0;
 
-  // 2. Protect the tyre's existing mileage (if it's new, it defaults to 0)
-  const currentTyreMileage = tyre.virtual_mileage || 0;
+  // 2. 🚀 FIXED: If the tyre is a RECAP, wipe the mileage to 0. Otherwise keep it.
+  const isRecap = tyre.status === 'RECAP';
+  const currentTyreMileage = isRecap ? 0 : (tyre.virtual_mileage || 0);
 
-  // 3. 🚀 NEW: Overpower the database by sending exact mileages!
+  // 3. Overpower the database by sending exact mileages!
   await supabase.from('tyres').update({ 
     vehicle_id: mountingSlot.vehicleId, 
     position: mountingSlot.position, 
     status: 'ACTIVE',
-    installMileage: truckOdo,           // Locks in the start point for trip math
-    virtual_mileage: currentTyreMileage // Stops the DB from copying the truck odo!
+    installMileage: truckOdo,           
+    virtual_mileage: currentTyreMileage // 🚀 ZEROED FOR RECAPS!
   }).eq('id', tyreId);
   
-  // 🚀 UPDATED: Also logging the truck odo into the history text for better tracking!
+  // 4. Log to text history
   await logTyreHistory(
     tyreId, 
     'MOUNTED', 
@@ -396,32 +397,61 @@ export default function TyreDashboard({ companyId }) {
     targetVehicle?.fleet_number, 
     mountingSlot.position
   );
+
+  // 5. 🚀 FIXED: Drop a record into inspections so the UI History tabs can see the Mount!
+  await supabase.from('tyre_inspections').insert([{
+    company_id: companyId,
+    tyre_id: tyreId,
+    inspection_date: new Date().toISOString().split('T')[0],
+    tread_depth: tyre.tread_depth,
+    psi: tyre.current_psi || null,
+    odometer: truckOdo
+  }]);
   
   setMountingSlot(null); 
   fetchData();
 };
 
   const handleUnmountTyre = async (tyreId, destinationStatus) => {
-    const tyre = tyres.find(t => t.id === tyreId);
-    const safeStatus = String(destinationStatus).trim().toUpperCase();
-    const sourceVehicle = vehicles.find(v => String(v.id) === String(tyre.vehicle_id));
+  const tyre = tyres.find(t => t.id === tyreId);
+  const safeStatus = String(destinationStatus).trim().toUpperCase();
+  const sourceVehicle = vehicles.find(v => String(v.id) === String(tyre.vehicle_id));
 
-    if (safeStatus === 'SCRAPPED') {
-      setScrapTyreTarget({ tyre, fromInspectPanel: true });
-      return; 
-    }
+  if (safeStatus === 'SCRAPPED') {
+    setScrapTyreTarget({ tyre, fromInspectPanel: true });
+    return; 
+  }
 
-    const isConfirmed = window.confirm(`Remove tyre from unit and send to ${safeStatus}?`);
-    if (!isConfirmed) return;
+  const isConfirmed = window.confirm(`Remove tyre from unit and send to ${safeStatus}?`);
+  if (!isConfirmed) return;
 
-    await supabase.from('tyres').update({ vehicle_id: null, position: null, status: safeStatus }).eq('id', tyreId).eq('company_id', companyId);
-    
-    // 🚀 UPDATED: Added `null` for PSI before the Vehicle and Position
-    await logTyreHistory(tyreId, 'UNMOUNTED', `Removed from unit. Sent to: ${safeStatus}`, tyre.tread_depth, null, sourceVehicle?.fleet_number, tyre.position);
-    
-    setInspectingTyre(null); 
-    fetchData();
+  // 🚀 FIXED: Zero out the mileage immediately if sending to RECAP
+  const updateData = { 
+    vehicle_id: null, 
+    position: null, 
+    status: safeStatus 
   };
+  if (safeStatus === 'RECAP') {
+    updateData.virtual_mileage = 0;
+  }
+
+  await supabase.from('tyres').update(updateData).eq('id', tyreId).eq('company_id', companyId);
+  
+  await logTyreHistory(tyreId, 'UNMOUNTED', `Removed from unit. Sent to: ${safeStatus}`, tyre.tread_depth, null, sourceVehicle?.fleet_number, tyre.position);
+  
+  // 🚀 FIXED: Drop a record into inspections so the UI History tabs can see the Unmount!
+  await supabase.from('tyre_inspections').insert([{
+    company_id: companyId,
+    tyre_id: tyreId,
+    inspection_date: new Date().toISOString().split('T')[0],
+    tread_depth: tyre.tread_depth,
+    psi: tyre.current_psi || null,
+    odometer: sourceVehicle?.total_mileage || sourceVehicle?.odometer || null
+  }]);
+
+  setInspectingTyre(null); 
+  fetchData();
+};
 
   const handleQuickMove = async (tyre, destinationStatus) => {
     if (!destinationStatus) return;
