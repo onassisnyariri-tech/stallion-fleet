@@ -33,6 +33,7 @@ export default function TyreDashboard({ companyId }) {
   const [fuelStartDate, setFuelStartDate] = useState('');
   const [fuelEndDate, setFuelEndDate] = useState('');
   const [fuelTruckFilter, setFuelTruckFilter] = useState('ALL');
+  const [fuelAssetTypeFilter, setFuelAssetTypeFilter] = useState('ALL'); // 🚀 NEW: Asset Category Filter
 
   const [editingHistoryLog, setEditingHistoryLog] = useState(null);
   const [historyEditForm, setHistoryEditForm] = useState({ logged_tread: '', logged_psi: '', details: '' });
@@ -579,6 +580,42 @@ export default function TyreDashboard({ companyId }) {
     link.click(); 
     document.body.removeChild(link);
   };
+  // 🚀 NEW: Fuel CSV Exporter
+  const exportFuelToCSV = () => {
+    const headers = ["Date", "Fleet Number", "Registration", "Asset Type", "Odometer (km)", "Volume (L)", "Total Cost (ZAR)", "Rand Per Liter", "Consumption (km/L)"];
+    
+    const csvRows = fuelMetrics.processedFuelLogs.map(log => {
+      const truck = vehicles.find(v => String(v.id) === String(log.vehicle_id));
+      const dateStr = log.log_date || new Date(log.created_at).toLocaleDateString('en-ZA');
+      const fleetNum = truck ? truck.fleet_number : 'Unknown';
+      const regNum = truck ? truck.registration_number || truck.registration || '' : '';
+      const aType = truck ? truck.asset_type || truck.type || 'Unknown' : 'Unknown';
+      
+      return [
+        `"${dateStr}"`, 
+        `"${fleetNum}"`, 
+        `"${regNum}"`,
+        `"${aType}"`,
+        log.odometer || 0, 
+        log.volume || 0, 
+        log.cost || 0, 
+        log.rpl !== '-' ? log.rpl : 0, 
+        `"${log.consumption || '-'}"`
+      ];
+    });
+
+    const csvContent = "sep=,\n" + [headers.join(','), ...csvRows.map(row => row.join(','))].join('\n');
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a'); 
+    link.setAttribute('href', url); 
+    link.setAttribute('download', `Fuel_Analytics_${fuelAssetTypeFilter}_${new Date().toISOString().split('T')[0]}.csv`);
+    
+    document.body.appendChild(link); 
+    link.click(); 
+    document.body.removeChild(link);
+  };
 
   const getTyreAtPosition = (vehicleId, position) => {
     return tyres.find(t => {
@@ -619,10 +656,26 @@ export default function TyreDashboard({ companyId }) {
   // 🚀 NEW: Fuel Ledger Time & Truck Filter Engine
   const filteredFuelLogs = useMemo(() => {
     let filtered = fuelLogs;
+    
+    // 1. Filter by Specific Truck
     if (fuelTruckFilter !== 'ALL') {
       filtered = filtered.filter(log => String(log.vehicle_id) === String(fuelTruckFilter));
     }
 
+    // 2. 🚀 NEW: Filter by Asset Category (Power Unit, Rigid, Bakkie)
+    if (fuelAssetTypeFilter !== 'ALL') {
+      filtered = filtered.filter(log => {
+        const truck = vehicles.find(v => String(v.id) === String(log.vehicle_id));
+        const tType = (truck?.asset_type || truck?.type || '').toLowerCase();
+        
+        if (fuelAssetTypeFilter === 'POWER UNIT') return tType.includes('power unit') || tType.includes('tractor');
+        if (fuelAssetTypeFilter === 'RIGID') return tType.includes('rigid');
+        if (fuelAssetTypeFilter === 'BAKKIE') return tType.includes('bakkie') || tType.includes('ldv');
+        return true;
+      });
+    }
+
+    // 3. Filter by Time
     if (fuelTimeFilter === 'ALL') return filtered;
 
     const now = new Date();
@@ -648,8 +701,7 @@ export default function TyreDashboard({ companyId }) {
       }
       return true;
     });
-  }, [fuelLogs, fuelTimeFilter, fuelStartDate, fuelEndDate, fuelTruckFilter]);
-
+  }, [fuelLogs, fuelTimeFilter, fuelStartDate, fuelEndDate, fuelTruckFilter, fuelAssetTypeFilter, vehicles]);
 
   const fuelMetrics = useMemo(() => {
     let totalDist = 0;
@@ -1293,21 +1345,48 @@ export default function TyreDashboard({ companyId }) {
 
         {activeSubTab === 'fuel' && (
           <div className="space-y-6">
-            {/* 🚀 NEW: THE FILTER CONTROLS */}
+            {/* 🚀 UPGRADED: THE FILTER CONTROLS */}
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
               
-              <div className="w-full lg:w-1/3">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Filter by Truck</label>
-                <select 
-                  value={fuelTruckFilter} 
-                  onChange={e => setFuelTruckFilter(e.target.value)}
-                  className="w-full p-2.5 border-2 border-gray-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:border-amber-500 bg-gray-50"
-                >
-                  <option value="ALL">All Fleet Vehicles</option>
-                  {vehicles.filter(v => !isTowedUnit(v)).map(v => (
-                    <option key={v.id} value={v.id}>{v.fleet_number} - {v.registration}</option>
-                  ))}
-                </select>
+              <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-1/2">
+                <div className="w-full sm:w-1/2">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">1. Asset Category</label>
+                  <select 
+                    value={fuelAssetTypeFilter} 
+                    onChange={e => { setFuelAssetTypeFilter(e.target.value); setFuelTruckFilter('ALL'); }}
+                    className="w-full p-2.5 border-2 border-gray-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:border-amber-500 bg-amber-50"
+                  >
+                    <option value="ALL">All Categories</option>
+                    <option value="POWER UNIT">Power Units (Tractors)</option>
+                    <option value="RIGID">Rigids (4x2 / 8-Ton)</option>
+                    <option value="BAKKIE">Bakkies / LDVs</option>
+                  </select>
+                </div>
+
+                <div className="w-full sm:w-1/2">
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">2. Specific Truck</label>
+                  <select 
+                    value={fuelTruckFilter} 
+                    onChange={e => setFuelTruckFilter(e.target.value)}
+                    className="w-full p-2.5 border-2 border-gray-200 rounded-lg text-sm font-bold text-gray-700 outline-none focus:border-amber-500 bg-gray-50"
+                  >
+                    <option value="ALL">All in Category</option>
+                    {vehicles
+                      .filter(v => !isTowedUnit(v))
+                      .filter(v => {
+                        if (fuelAssetTypeFilter === 'ALL') return true;
+                        const tType = (v.asset_type || v.type || '').toLowerCase();
+                        if (fuelAssetTypeFilter === 'POWER UNIT') return tType.includes('power unit') || tType.includes('tractor');
+                        if (fuelAssetTypeFilter === 'RIGID') return tType.includes('rigid');
+                        if (fuelAssetTypeFilter === 'BAKKIE') return tType.includes('bakkie') || tType.includes('ldv');
+                        return true;
+                      })
+                      .map(v => (
+                        <option key={v.id} value={v.id}>{v.fleet_number} - {v.registration || v.registration_number}</option>
+                      ))
+                    }
+                  </select>
+                </div>
               </div>
 
               <div className="flex flex-col items-end w-full lg:w-auto">
@@ -1377,6 +1456,9 @@ export default function TyreDashboard({ companyId }) {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
                 <h3 className="font-bold text-gray-800 uppercase tracking-widest text-sm">Fleet Fuel Ledger</h3>
+                <button type="button" onClick={exportFuelToCSV} className="bg-green-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-green-700 shadow-sm whitespace-nowrap flex items-center gap-2 transition-colors active:scale-95">
+                  📥 EXPORT CSV
+                </button>
               </div>
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-left border-collapse min-w-200">
@@ -1394,7 +1476,7 @@ export default function TyreDashboard({ companyId }) {
                   </thead>
                   <tbody>
                     {fuelMetrics.processedFuelLogs.length === 0 ? (
-                      <tr><td colSpan="7" className="p-10 text-center text-gray-500 font-bold italic">No fuel logs found for these filters.</td></tr>
+                      <tr><td colSpan="8" className="p-10 text-center text-gray-500 font-bold italic">No fuel logs found for these filters.</td></tr>
                     ) : (
                       fuelMetrics.processedFuelLogs.map(log => {
                         const truck = vehicles.find(v => String(v.id) === String(log.vehicle_id));
