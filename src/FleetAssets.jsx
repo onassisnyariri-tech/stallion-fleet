@@ -61,42 +61,48 @@ const [isFetchingOdoHistory, setIsFetchingOdoHistory] = useState(false);
       (asset.registration && asset.registration.toLowerCase().includes(searchQuery.toLowerCase()));
 
     // 2. Check if it matches the Category Tabs
-    const isTowed = (asset.asset_type || asset.type || '').toLowerCase().includes('trailer');
-    const matchesCategory = 
-      assetFilter === 'ALL' ? true :
-      assetFilter === 'TRAILER' ? isTowed :
-      !isTowed; // If 'POWER', it must NOT be a trailer
+  const typeStr1 = (asset.asset_type || asset.type || '').toLowerCase();
+  const isTowed = typeStr1.includes('trailer') || typeStr1.includes('link') || typeStr1.includes('deck') || typeStr1.includes('dolly') || typeStr1.includes('abnormal') || typeStr1.includes('modular');
+  
+  const matchesCategory = 
+    assetFilter === 'ALL' ? true :
+    assetFilter === 'TRAILER' ? isTowed :
+    !isTowed; // If 'POWER', it must NOT be a trailer
 
-    return matchesSearch && matchesCategory;
-  });
-  // ==========================================
-  // 🚀 NEW: THE "ALREADY HOOKED" BLACKLIST
-  // ==========================================
-  // 1. Scan the whole fleet and compile an array of IDs for every trailer currently attached to a truck
-  const currentlyHookedTrailerIds = assets.reduce((acc, asset) => {
-    if (asset.hooked_trailer_id) acc.push(asset.hooked_trailer_id);
-    if (asset.hooked_trailer_2_id) acc.push(asset.hooked_trailer_2_id);
-    return acc;
-  }, []);
+  return matchesSearch && matchesCategory;
+});
 
-  // 2. Define 'hookableTrailers' to ONLY include trailers that are NOT in the blacklist
-  const hookableTrailers = assets.filter(asset => {
-    const isTowed = (asset.asset_type || asset.type || '').toLowerCase().includes('trailer');
-    return isTowed && !currentlyHookedTrailerIds.includes(asset.id);
-  });
-  const fetchFleet = async () => {
-    if (!companyId) return; // SaaS Safety Check
-    const { data } = await supabase.from('vehicles').select('*').eq('company_id', companyId);
-    if (data) {
-      const sortedAssets = data.sort((a, b) => {
-        if (!a.fleet_number || !b.fleet_number) return 0;
-        return a.fleet_number.localeCompare(b.fleet_number, undefined, { numeric: true, sensitivity: 'base' });
-      });
-      setAssets(sortedAssets);
-    } else {
-      setAssets([]);
-    }
-  };
+// ==========================================
+// 🚀 NEW: THE "ALREADY HOOKED" BLACKLIST
+// ==========================================
+// 1. Scan the whole fleet and compile an array of IDs for every trailer currently attached to a truck
+const currentlyHookedTrailerIds = assets.reduce((acc, asset) => {
+  if (asset.hooked_trailer_id) acc.push(asset.hooked_trailer_id);
+  if (asset.hooked_trailer_2_id) acc.push(asset.hooked_trailer_2_id);
+  return acc;
+}, []);
+
+// 2. Define 'hookableTrailers' to ONLY include trailers that are NOT in the blacklist
+const hookableTrailers = assets.filter(asset => {
+  const typeStr2 = (asset.asset_type || asset.type || '').toLowerCase();
+  const isTowed = typeStr2.includes('trailer') || typeStr2.includes('link') || typeStr2.includes('deck') || typeStr2.includes('dolly') || typeStr2.includes('abnormal') || typeStr2.includes('modular');
+  
+  return isTowed && !currentlyHookedTrailerIds.includes(asset.id);
+});
+
+const fetchFleet = async () => {
+  if (!companyId) return; // SaaS Safety Check
+  const { data } = await supabase.from('vehicles').select('*').eq('company_id', companyId);
+  if (data) {
+    const sortedAssets = data.sort((a, b) => {
+      if (!a.fleet_number || !b.fleet_number) return 0;
+      return a.fleet_number.localeCompare(b.fleet_number, undefined, { numeric: true, sensitivity: 'base' });
+    });
+    setAssets(sortedAssets);
+  } else {
+    setAssets([]);
+  }
+};
 // 🚀 FIXED: INDEPENDENT ODOMETER UPDATE (WITH AUDIT LEDGER)
 const handleQuickOdometerUpdate = async (vehicleId, newOdometerValue) => {
   if (!newOdometerValue) return;

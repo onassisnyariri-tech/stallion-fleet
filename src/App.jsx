@@ -16,6 +16,7 @@ import UserSettings from './UserSettings';
 import LiveDispatchBoard from './LiveDispatchBoard';
 import Drivers from './Drivers';
 import LightVehicleInspection from './LightVehicleInspection'; // adjust path if needed
+import AdminBillingDashboard from './AdminBillingDashboard';
 
 export default function App() {
   const { permissions } = useAuth(); // 2. ADD THIS HOOK
@@ -218,34 +219,43 @@ useEffect(() => {
 </div>
             </div>
 
-            {/* Right Side: Tenant Info & Logout */}
+           {/* Right Side: Tenant Info & Logout */}
             <div className="flex items-center gap-4 pl-4 border-l border-gray-800 ml-4">
               
-              {/* SECRET SUPER ADMIN BUTTON - Change this to your exact email! */}
+              {/* SECRET SUPER ADMIN BUTTONS - Only visible to Onassis */}
               {session?.user?.email === 'onassis.nyariri@gmail.com' && (
-                <button 
-                  onClick={() => setActiveTab('admin')} 
-                  className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest border-2 transition-colors shrink-0 hidden sm:block ${activeTab === 'admin' ? 'bg-red-600 border-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 'border-red-900 text-red-500 hover:bg-red-900/30'}`}
-                >
-                  God Mode
-                </button>
+                <div className="hidden sm:flex gap-2">
+                  <button 
+                    onClick={() => setActiveTab('billing')} 
+                    className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest border-2 transition-colors shrink-0 ${activeTab === 'billing' ? 'bg-purple-600 border-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.5)]' : 'border-purple-900 text-purple-500 hover:bg-purple-900/30'}`}
+                  >
+                    MRR Billing
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('admin')} 
+                    className={`px-4 py-2 rounded-lg text-sm font-black uppercase tracking-widest border-2 transition-colors shrink-0 ${activeTab === 'admin' ? 'bg-red-600 border-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)]' : 'border-red-900 text-red-500 hover:bg-red-900/30'}`}
+                  >
+                    God Mode
+                  </button>
+                </div>
               )}
 
               <div className="text-right hidden sm:block">
                 {/* Change this line to check for both company_name AND name */}
-<p className="text-white text-xs font-black uppercase tracking-wider">
-  {companyContext?.company_name || companyContext?.name || 'Unassigned Tenant'}
-</p>
-                <p className="text-gray-500 text-[10px] uppercase font-bold">{session.user.email}</p>
+                <p className="text-white text-xs font-black uppercase tracking-wider">
+                  {companyContext?.company_name || companyContext?.name || 'Unassigned Tenant'}
+                </p>
+                <p className="text-gray-500 text-[10px] uppercase font-bold">{session?.user?.email}</p>
               </div>
+              
               {/* ADDED: Settings Button */}
-<button 
-  onClick={() => setActiveTab('settings')} 
-  className="text-gray-400 hover:text-white px-3 py-1.5 rounded transition-colors"
-  title="Account Settings"
->
-  ⚙️
-</button>
+              <button 
+                onClick={() => setActiveTab('settings')} 
+                className="text-gray-400 hover:text-white px-3 py-1.5 rounded transition-colors"
+                title="Account Settings"
+              >
+                ⚙️
+              </button>
               <button onClick={handleLogout} className="bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500 hover:text-white px-3 py-1.5 rounded text-xs font-black transition-colors uppercase tracking-wider active:scale-95">Logout</button>
             </div>
             
@@ -259,35 +269,37 @@ useEffect(() => {
           {hasFeature('reports') && permissions?.canAccessFinancials && <button onClick={() => setActiveTab('reports')} style={activeTab === 'reports' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'reports' ? 'text-gray-400' : ''}`}>Reports</button>}
           
           {/* 🚀 MOBILE CLIENT SUMMARY TAB */}
-{hasFeature('client-summary') && permissions?.canAccessFinancials && (
-  <button 
-    onClick={() => setActiveTab('client-summary')} 
-    style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-    className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'client-summary' ? 'text-gray-400' : ''}`}
-  >
-    Summary
-  </button>
-)}
-{/* 🚀 MOBILE YARD TAB */}
-{hasFeature('yard') && (
-  <button 
-    onClick={() => setActiveTab('yard')} 
-    style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-    className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'yard' ? 'text-gray-400' : ''}`}
-  >
-    Yard
-  </button>
-)}
-{/* 🚀 MOBILE DISPATCH TAB */}
-{hasFeature('dispatch') && (permissions?.canAccessDispatch || permissions?.canAccessAdminSettings) && (
-  <button 
-    onClick={() => setActiveTab('dispatch')} 
-    style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} 
-    className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'dispatch' ? 'text-gray-400' : ''}`}
-  >
-    Dispatch
-  </button>
-)}
+          {hasFeature('client-summary') && permissions?.canAccessFinancials && (
+            <button 
+              onClick={() => setActiveTab('client-summary')} 
+              style={activeTab === 'client-summary' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'client-summary' ? 'text-gray-400' : ''}`}
+            >
+              Summary
+            </button>
+          )}
+
+          {/* 🚀 MOBILE YARD TAB */}
+          {hasFeature('yard') && (
+            <button 
+              onClick={() => setActiveTab('yard')} 
+              style={activeTab === 'yard' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'yard' ? 'text-gray-400' : ''}`}
+            >
+              Yard
+            </button>
+          )}
+
+          {/* 🚀 MOBILE DISPATCH TAB */}
+          {hasFeature('dispatch') && (permissions?.canAccessDispatch || permissions?.canAccessAdminSettings) && (
+            <button 
+              onClick={() => setActiveTab('dispatch')} 
+              style={activeTab === 'dispatch' ? { backgroundColor: brandColor, color: 'white' } : {}} 
+              className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'dispatch' ? 'text-gray-400' : ''}`}
+            >
+              Dispatch
+            </button>
+          )}
           
           {hasFeature('office') && permissions?.canAccessTyres && <button onClick={() => setActiveTab('office')} style={activeTab === 'office' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'office' ? 'text-gray-400' : ''}`}>Tyres</button>}
           {hasFeature('pm') && permissions?.canAccessMaintenance && <button onClick={() => setActiveTab('pm')} style={activeTab === 'pm' ? { backgroundColor: brandColor, color: 'white' } : {}} className={`shrink-0 px-4 py-2 rounded text-xs font-bold uppercase transition-colors ${activeTab !== 'pm' ? 'text-gray-400' : ''}`}>Maint</button>}
@@ -358,6 +370,10 @@ useEffect(() => {
   
   {/* God Mode Route */}
   {activeTab === 'admin' && session?.user?.email === 'onassis.nyariri@gmail.com' && <SuperAdminDashboard />}
+  {/* 🚀 PASTE THE NEW BILLING SCREEN HERE */}
+    {activeTab === 'billing' && session?.user?.email === 'onassis.nyariri@gmail.com' && (
+    <AdminBillingDashboard />
+  )}
 </main>
       
 
