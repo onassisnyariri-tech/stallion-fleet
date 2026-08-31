@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase } from './supabaseClient'; 
 
 // 🚀 SCALABLE PRICING ENGINE
 const PRICING_TIERS = {
   BAKKIE: 100,
   RIGID: 200,
   TANDEM_TRAILER: 250,
+  TRI_AXLE_TRAILER: 300, // 🚀 NEW: Set your 3-axle price right here!
+  DOLLY_8: 250,
   POWER_UNIT: 300,
   DOLLY_16: 500,
   ABNORMAL_16: 500,
@@ -13,14 +15,12 @@ const PRICING_TIERS = {
   UNKNOWN: 0
 };
 
-// 🚀 NEW: CLIENT DIRECTORY
+// 🚀 CLIENT DIRECTORY
 const COMPANY_NAMES = {
   1: 'Stallion Trucking',
   8: 'Dalinjebo Group',
   9: 'WastePlan'
-  // When you onboard new clients, just add them here (e.g., 10: 'NextGen Logistics')
 };
-
 
 export default function AdminBillingDashboard() {
   const [vehicles, setVehicles] = useState([]);
@@ -32,10 +32,9 @@ export default function AdminBillingDashboard() {
 
   const fetchActiveFleet = async () => {
     setIsLoading(true);
-    // We ONLY fetch ACTIVE vehicles. Scrapped/Sold ones are completely ignored for billing.
     const { data, error } = await supabase
       .from('vehicles')
-      .select('id, company_id, fleet_number, asset_type, type')
+      .select('id, company_id, fleet_number, asset_type, type, make, model, axle_configuration')
       .eq('status', 'ACTIVE');
 
     if (error) {
@@ -46,29 +45,53 @@ export default function AdminBillingDashboard() {
     setIsLoading(false);
   };
 
-  // 🚀 THE UPGRADED CATEGORIZATION ENGINE
-      const categorizeAsset = (vehicle) => {
-        const typeStr = String(vehicle.asset_type || vehicle.type || '').toLowerCase();
-        
-        // 1. Light Vehicles
-        if (typeStr.includes('bakkie') || typeStr.includes('ldv')) return 'BAKKIE';
-        
-        // 2. Rigids
-        if (typeStr.includes('rigid')) return 'RIGID';
-        
-        // 3. Specialized Trailers
-        if (typeStr.includes('dolly')) return 'DOLLY_16';
-        if (typeStr.includes('abnormal') && typeStr.includes('32')) return 'ABNORMAL_32';
-        if (typeStr.includes('abnormal')) return 'ABNORMAL_16';
-        
-        // 4. Standard Trailers (Catch-all for Link, Deck, Tandem, etc.)
-        if (typeStr.includes('trailer') || typeStr.includes('link') || typeStr.includes('deck') || typeStr.includes('tandem')) {
-          return 'TANDEM_TRAILER';
-        }
-        
-        // 5. Default fallback
-        return 'POWER_UNIT'; 
-      };
+  // 🚀 THE BULLETPROOF CATEGORIZATION ENGINE
+  const categorizeAsset = (vehicle) => {
+    const searchString = String(
+      (vehicle.asset_type || '') + ' ' + 
+      (vehicle.type || '') + ' ' + 
+      (vehicle.make || '') + ' ' + 
+      (vehicle.model || '') + ' ' +
+      (vehicle.axle_configuration || '')
+    ).toLowerCase();
+    
+    // 1. Light Vehicles
+    if (searchString.includes('bakkie') || searchString.includes('ldv')) return 'BAKKIE';
+    
+    // 2. Rigids
+    if (searchString.includes('rigid')) return 'RIGID';
+    
+    // 3. Specialized Trailers
+    if (searchString.includes('dolly')) {
+      if (searchString.includes('double axle') || searchString.includes('8')) {
+        return 'DOLLY_8';
+      }
+      return 'DOLLY_16';
+    }
+    
+    // Catches "modular" or "32" tyre abnormal trailers and bills them at R1000
+    if (searchString.includes('modular') || (searchString.includes('abnormal') && searchString.includes('32'))) {
+      return 'ABNORMAL_32';
+    }
+    
+    // Catches standard abnormal and low beds
+    if (searchString.includes('abnormal') || searchString.includes('low bed') || searchString.includes('step deck')) {
+      return 'ABNORMAL_16';
+    }
+
+    // 🚀 NEW: Catch Tri-Axles BEFORE they get swallowed by the generic trailer rule
+    if (searchString.includes('3-axle') || searchString.includes('tri-axle') || searchString.includes('tri axle')) {
+      return 'TRI_AXLE_TRAILER';
+    }
+    
+    // 4. Standard Trailers (Catch-all for Link, Deck, Tandem, etc.)
+    if (searchString.includes('trailer') || searchString.includes('link') || searchString.includes('deck') || searchString.includes('tandem')) {
+      return 'TANDEM_TRAILER';
+    }
+    
+    // 5. Default fallback
+    return 'POWER_UNIT'; 
+  };
 
   // 🚀 THE BILLING CALCULATOR
   const clientInvoices = useMemo(() => {
@@ -82,8 +105,9 @@ export default function AdminBillingDashboard() {
           totalAssets: 0,
           totalRevenue: 0,
           breakdown: {
-            BAKKIE: 0, RIGID: 0, TANDEM_TRAILER: 0, POWER_UNIT: 0, 
-            DOLLY_16: 0, ABNORMAL_16: 0, ABNORMAL_32: 0, UNKNOWN: 0
+            // 🚀 NEW: Added TRI_AXLE_TRAILER so the app doesn't crash
+            BAKKIE: 0, RIGID: 0, TANDEM_TRAILER: 0, TRI_AXLE_TRAILER: 0, POWER_UNIT: 0, 
+            DOLLY_8: 0, DOLLY_16: 0, ABNORMAL_16: 0, ABNORMAL_32: 0, UNKNOWN: 0
           }
         };
       }
@@ -95,7 +119,6 @@ export default function AdminBillingDashboard() {
       grouped[cid].totalRevenue += PRICING_TIERS[category] || 0;
     });
 
-    // Convert the object into an array and sort by highest paying client
     return Object.values(grouped).sort((a, b) => b.totalRevenue - a.totalRevenue);
   }, [vehicles]);
 
@@ -140,13 +163,13 @@ export default function AdminBillingDashboard() {
                 clientInvoices.map(client => (
                   <div key={client.companyId} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="p-5 bg-gray-900 flex justify-between items-center">
-  <h4 className="text-white font-black uppercase tracking-widest">
-    Client ID {client.companyId}: {COMPANY_NAMES[client.companyId] || 'Unknown Company'}
-  </h4>
-  <span className="bg-green-500/20 text-green-400 border border-green-500/50 px-3 py-1 rounded text-lg font-black">
-    R {client.totalRevenue.toLocaleString()} <span className="text-xs font-bold text-green-400/70">/mo</span>
-  </span>
-</div>
+                      <h4 className="text-white font-black uppercase tracking-widest">
+                        Client ID {client.companyId}: {COMPANY_NAMES[client.companyId] || 'Unknown Company'}
+                      </h4>
+                      <span className="bg-green-500/20 text-green-400 border border-green-500/50 px-3 py-1 rounded text-lg font-black">
+                        R {client.totalRevenue.toLocaleString()} <span className="text-xs font-bold text-green-400/70">/mo</span>
+                      </span>
+                    </div>
                     
                     <div className="p-5">
                       <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Billable Assets: {client.totalAssets}</p>
