@@ -170,6 +170,47 @@ const fetchOdoHistory = async () => {
   }
   setIsFetchingOdoHistory(false);
 };
+// ==========================================
+  // 🚀 INSTANTLY SWAP FRONT AND REAR LINKS
+  // ==========================================
+  const handleSwapTrailers = async (truckId, trailer1Id, trailer2Id) => {
+    console.log("Swapping trailers for truck...", truckId);
+    
+    try {
+      // 1. Update the Power Unit (Swap the hooked IDs)
+      const { error: truckError } = await supabase
+        .from('vehicles')
+        .update({
+          hooked_trailer_id: trailer2Id,
+          hooked_trailer_2_id: trailer1Id
+        })
+        .eq('id', truckId);
+
+      if (truckError) throw truckError;
+
+      // 2. Update the old Front Link to become Position 2 (Rear)
+      const { error: t1Error } = await supabase
+        .from('vehicles')
+        .update({ hook_position: '2' })
+        .eq('id', trailer1Id);
+        
+      if (t1Error) throw t1Error;
+
+      // 3. Update the old Rear Link to become Position 1 (Front)
+      const { error: t2Error } = await supabase
+        .from('vehicles')
+        .update({ hook_position: '1' })
+        .eq('id', trailer2Id);
+
+      if (t2Error) throw t2Error;
+
+      // 4. Refresh the Yard Walkaround to show the new order
+      fetchFleet(); 
+      
+    } catch (error) {
+      alert("Failed to swap trailers: " + error.message);
+    }
+  };
 
   useEffect(() => {
     // 🚀 HARD RESET: Wipe the old company's assets and trips from the screen
@@ -1072,6 +1113,19 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
         DROP TRAILER
       </button>
     </div>
+
+    {/* 🚀 NEW: SWAP LINKS BUTTON (ONLY SHOWS IF 2 TRAILERS ARE HOOKED) */}
+    {selectedAsset.hooked_trailer_2_id && (
+      <button 
+        onClick={() => handleSwapTrailers(selectedAsset.id, selectedAsset.hooked_trailer_id, selectedAsset.hooked_trailer_2_id)}
+        className="w-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-4 py-3 rounded-xl font-black text-sm uppercase tracking-widest hover:bg-indigo-500/20 transition-colors flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+        </svg>
+        Swap Front & Rear Links
+      </button>
+    )}
   </div>
 )}
 
