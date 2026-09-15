@@ -131,14 +131,14 @@ const handleQuickOdometerUpdate = async (vehicleId, newOdometerValue) => {
   const oldOdo = vehicle ? parseFloat(vehicle.total_mileage || 0) : 0;
 
   // ==========================================
-  // 🚀 NEW: 5000km SAFETY WARNING
+  // 🚀 FIXED: 5000km CUSTOM RED WARNING (MANUAL SAVE)
   // ==========================================
-  if (Math.abs(numericOdo - oldOdo) >= 5000) {
-    const confirmLargeJump = window.confirm(
-      `⚠️ ODOMETER WARNING!\n\nYou entered ${numericOdo.toLocaleString()} km, but the vehicle's last recorded mileage was ${oldOdo.toLocaleString()} km.\n\nThat is a jump of ${Math.abs(numericOdo - oldOdo).toLocaleString()} km. Are you SURE this is correct?`
-    );
+  const diff = Math.abs(numericOdo - oldOdo);
+  if (diff >= 5000) {
+    // This pauses the manual save and triggers the massive Red Modal
+    const confirmLargeJump = await triggerOdoWarning(numericOdo, oldOdo, diff, 'JUMP');
     
-    // If they click 'Cancel', abort the save entirely.
+    // If they click 'Cancel' on the red modal, abort the save entirely.
     if (!confirmLargeJump) return; 
   }
   // ==========================================
