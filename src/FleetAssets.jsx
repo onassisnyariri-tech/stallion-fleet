@@ -19,6 +19,23 @@ const [editAssetData, setEditAssetData] = useState({ fleet_number: '', registrat
 const [showOdoHistory, setShowOdoHistory] = useState(false);
 const [odoHistoryData, setOdoHistoryData] = useState([]);
 const [isFetchingOdoHistory, setIsFetchingOdoHistory] = useState(false);
+// ==========================================
+  // 🚀 CUSTOM ODOMETER WARNING STATE & TRIGGER
+  // ==========================================
+  const [odoWarning, setOdoWarning] = useState({ isOpen: false, entered: 0, current: 0, diff: 0, type: '' });
+  const [warningResolver, setWarningResolver] = useState(null);
+
+  const triggerOdoWarning = (entered, current, diff, type) => {
+    return new Promise((resolve) => {
+      setOdoWarning({ isOpen: true, entered, current, diff, type });
+      setWarningResolver({ resolve }); 
+    });
+  };
+  // ==========================================
+// 🚀 NEW: HOOK HISTORY STATE
+  const [hookHistoryData, setHookHistoryData] = useState([]);
+  const [showHookHistory, setShowHookHistory] = useState(false);
+  const [isFetchingHookHistory, setIsFetchingHookHistory] = useState(false);
   // 🚀 NEW: SEARCH & FILTER STATE
   const [searchQuery, setSearchQuery] = useState('');
   const [assetFilter, setAssetFilter] = useState('ALL'); // 'ALL', 'POWER', 'TRAILER'
@@ -113,13 +130,25 @@ const handleQuickOdometerUpdate = async (vehicleId, newOdometerValue) => {
   const vehicle = assets.find(v => v.id === vehicleId);
   const oldOdo = vehicle ? parseFloat(vehicle.total_mileage || 0) : 0;
 
+  // ==========================================
+  // 🚀 NEW: 5000km SAFETY WARNING
+  // ==========================================
+  if (Math.abs(numericOdo - oldOdo) >= 5000) {
+    const confirmLargeJump = window.confirm(
+      `⚠️ ODOMETER WARNING!\n\nYou entered ${numericOdo.toLocaleString()} km, but the vehicle's last recorded mileage was ${oldOdo.toLocaleString()} km.\n\nThat is a jump of ${Math.abs(numericOdo - oldOdo).toLocaleString()} km. Are you SURE this is correct?`
+    );
+    
+    // If they click 'Cancel', abort the save entirely.
+    if (!confirmLargeJump) return; 
+  }
+  // ==========================================
+
   // 1. Optimistic UI Update (Updates the background fleet array)
   setAssets(prevAssets => 
     prevAssets.map(v => 
       v.id === vehicleId ? { ...v, total_mileage: numericOdo } : v
     )
   );
-
   // 2. Optimistic UI Update (Updates the actively selected truck)
   if (selectedAsset && selectedAsset.id === vehicleId) {
     setSelectedAsset(prev => ({ ...prev, total_mileage: numericOdo }));
@@ -169,6 +198,36 @@ const fetchOdoHistory = async () => {
     setOdoHistoryData(data || []);
   }
   setIsFetchingOdoHistory(false);
+};
+
+// ==========================================
+// 🚀 NEW: FETCH HOOK HISTORY (CURRENT MONTH)
+// ==========================================
+const fetchHookHistory = async () => {
+  setIsFetchingHookHistory(true);
+  setShowHookHistory(true);
+
+  // 1. Calculate the exactly 12:00 AM on the 1st of the current month
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0, 0, 0, 0);
+
+  // 2. Fetch everything from that date forward
+  const { data, error } = await supabase
+    .from('trailer_hook_history')
+    .select('*')
+    .eq('trailer_id', selectedAsset.id)
+    .eq('company_id', companyId)
+    .gte('created_at', startOfMonth.toISOString()) // 🚀 "Greater Than or Equal To" start of month
+    .order('created_at', { ascending: false }); 
+    // Note: I removed the .limit(15) so it doesn't cut off if a trailer moved 16 times this month!
+
+  if (!error) {
+    setHookHistoryData(data || []);
+  } else {
+    console.error("Failed to fetch hook history:", error);
+  }
+  setIsFetchingHookHistory(false);
 };
 // ==========================================
   // 🚀 INSTANTLY SWAP FRONT AND REAR LINKS
@@ -362,59 +421,87 @@ const handleUpdateAsset = async (e) => {
     setIsHooking(true);
   };
 
-  const executeHook = async () => {
-  // 🚀 FIXED: Robust validation that handles '0' and empty inputs correctly
-  const trailerSelected = hookData.trailerId && hookData.trailerId !== '';
-  const odoEntered = hookData.odometer !== '' && hookData.odometer !== null && hookData.odometer !== undefined;
-  
-  if (!trailerSelected || !odoEntered) {
-    return alert("Wait! Please make sure you have selected a trailer and entered the Odometer.");
-  }
+const executeHook = async () => {
+    // 🚀 FIXED: Robust validation that handles '0' and empty inputs correctly
+    const trailerSelected = hookData.trailerId && hookData.trailerId !== '';
+    const odoEntered = hookData.odometer !== '' && hookData.odometer !== null && hookData.odometer !== undefined;
+    
+    if (!trailerSelected || !odoEntered) {
+      return alert("Wait! Please make sure you have selected a trailer and entered the Odometer.");
+    }
 
-  if (hookData.isSuperlink && !hookData.trailer2Id) {
-    return alert("Please select the Rear Trailer for the Superlink.");
-  }
+    if (hookData.isSuperlink && !hookData.trailer2Id) {
+      return alert("Please select the Rear Trailer for the Superlink.");
+    }
 
-  // 🚀 THE CLONE BLOCKER
-  if (hookData.isSuperlink && String(hookData.trailerId) === String(hookData.trailer2Id)) {
-    return alert("SECURITY BLOCK: You cannot hook the same trailer to both the front and rear positions!");
-  }
+    // 🚀 THE CLONE BLOCKER
+    if (hookData.isSuperlink && String(hookData.trailerId) === String(hookData.trailer2Id)) {
+      return alert("SECURITY BLOCK: You cannot hook the same trailer to both the front and rear positions!");
+    }
+    // ==========================================
+    // 🚀 NEW: 5000km SAFETY WARNING
+    // ==========================================
+    const currentOdo = parseFloat(selectedAsset.total_mileage || 0);
+    const enteredOdo = parseFloat(hookData.odometer);
+    
+    // Checks if the difference is 5000 or more (works for both too high AND too low)
+    if (Math.abs(enteredOdo - currentOdo) >= 5000) {
+      const confirmLargeJump = window.confirm(
+        `⚠️ ODOMETER WARNING!\n\nYou entered ${enteredOdo.toLocaleString()} km, but the truck's last recorded mileage was ${currentOdo.toLocaleString()} km.\n\nThat is a jump of ${Math.abs(enteredOdo - currentOdo).toLocaleString()} km. Are you SURE this is correct?`
+      );
+      
+      // If they click 'Cancel', we abort the hook immediately.
+      if (!confirmLargeJump) return;
+    }
 
-  // 1. UPDATE THE TRUCK
-  const { error } = await supabase.from('vehicles').update({
-    hooked_trailer_id: hookData.trailerId,
-    hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
-    hook_odometer: parseFloat(hookData.odometer),
-    total_mileage: parseFloat(hookData.odometer) 
-  }).eq('id', selectedAsset.id).eq('company_id', companyId);
+    // 1. UPDATE THE TRUCK
+    const { error } = await supabase.from('vehicles').update({
+      hooked_trailer_id: hookData.trailerId,
+      hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
+      hook_odometer: parseFloat(hookData.odometer),
+      total_mileage: parseFloat(hookData.odometer) 
+    }).eq('id', selectedAsset.id).eq('company_id', companyId);
 
-  if (error) return alert(`DATABASE ERROR: Could not save hook. \n\nDetails: ${error.message}`);
+    if (error) return alert(`DATABASE ERROR: Could not save hook. \n\nDetails: ${error.message}`);
 
-  // 2. 🚀 NEW: TELL THE TRAILERS THEIR POSITIONS!
-  // Stamp the front trailer as Position 1
-  await supabase.from('vehicles').update({ hook_position: 1 }).eq('id', hookData.trailerId);
-  
-  // Stamp the rear trailer as Position 2 (if it's a superlink)
-  if (hookData.isSuperlink && hookData.trailer2Id) {
-    await supabase.from('vehicles').update({ hook_position: 2 }).eq('id', hookData.trailer2Id);
-  }
+    // 2. TELL THE TRAILERS THEIR POSITIONS!
+    await supabase.from('vehicles').update({ hook_position: 1 }).eq('id', hookData.trailerId);
+    
+    if (hookData.isSuperlink && hookData.trailer2Id) {
+      await supabase.from('vehicles').update({ hook_position: 2 }).eq('id', hookData.trailer2Id);
+    }
 
-  // SUCCESS
-  setIsHooking(false);
-  setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
-  await fetchFleet();
-  
-  const updatedTruck = assets.find(a => a.id === selectedAsset.id);
-  setSelectedAsset({
-    ...updatedTruck, 
-    hooked_trailer_id: hookData.trailerId, 
-    hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
-    hook_odometer: hookData.odometer
-  });
-  setWalkaroundOdo(hookData.odometer.toString()); 
-};
+    // ========================================================
+    // 3. 🚀 NEW: WRITE TO THE HOOK LEDGER
+    // ========================================================
+    const hookRecords = [
+      { company_id: companyId, truck_id: selectedAsset.id, trailer_id: hookData.trailerId, action: 'HOOKED', odometer: parseFloat(hookData.odometer) }
+    ];
+    if (hookData.isSuperlink && hookData.trailer2Id) {
+      hookRecords.push({ company_id: companyId, truck_id: selectedAsset.id, trailer_id: hookData.trailer2Id, action: 'HOOKED', odometer: parseFloat(hookData.odometer) });
+    }
+    // Fire and forget (no need to await/block the UI)
+    supabase.from('trailer_hook_history').insert(hookRecords).then(({error}) => {
+      if (error) console.error("Ledger Error:", error);
+    });
+    // ========================================================
 
-  const executeDrop = async () => {
+    // SUCCESS
+    setIsHooking(false);
+    setHookData({ trailerId: '', trailer2Id: '', odometer: '', isSuperlink: false });
+    await fetchFleet();
+    
+    const updatedTruck = assets.find(a => a.id === selectedAsset.id);
+    setSelectedAsset({
+      ...updatedTruck, 
+      hooked_trailer_id: hookData.trailerId, 
+      hooked_trailer_2_id: hookData.isSuperlink ? hookData.trailer2Id : null,
+      hook_odometer: hookData.odometer
+    });
+    setWalkaroundOdo(hookData.odometer.toString()); 
+  };
+
+const executeDrop = async () => {
   if (!dropOdometer) return alert("Enter the drop Odometer reading.");
   setIsProcessingDrop(true);
 
@@ -426,7 +513,17 @@ const handleUpdateAsset = async (e) => {
     setIsProcessingDrop(false);
     return alert("Drop Odometer cannot be less than Hook Odometer!");
   }
-
+  // ==========================================
+  // 🚀 FIXED: 5000km CUSTOM RED WARNING (DROP)
+  // ==========================================
+  if (tripDistance >= 5000) {
+    const confirmLargeJump = await triggerOdoWarning(endOdo, startOdo, tripDistance, 'DROP');
+    
+    if (!confirmLargeJump) {
+      setIsProcessingDrop(false);
+      return; // Aborts the drop
+    }
+  }
   // ==========================================
   // 🚀 NEW: PERMANENT TRIP LEDGER INSERT
   // ==========================================
@@ -443,8 +540,6 @@ const handleUpdateAsset = async (e) => {
 
   if (tripError) {
     console.error("Ledger Sync Warning:", tripError.message);
-    // We log it to the console rather than alerting the yard operator, 
-    // as they don't need to be blocked by an admin ledger error.
   }
   // ==========================================
 
@@ -453,7 +548,7 @@ const handleUpdateAsset = async (e) => {
     const newTrailerTotal = parseFloat(trailer1.total_mileage || 0) + tripDistance;
     await supabase.from('vehicles').update({ 
       total_mileage: newTrailerTotal,
-      hook_position: null // 🚀 NEW: Wipes the position clean so it doesn't stay as Position 1
+      hook_position: null 
     }).eq('id', trailer1.id).eq('company_id', companyId);
   }
 
@@ -463,10 +558,24 @@ const handleUpdateAsset = async (e) => {
       const newTrailerTotal2 = parseFloat(trailer2.total_mileage || 0) + tripDistance;
       await supabase.from('vehicles').update({ 
         total_mileage: newTrailerTotal2,
-        hook_position: null // 🚀 NEW: Wipes the position clean so it doesn't stay as Position 2
+        hook_position: null 
       }).eq('id', trailer2.id).eq('company_id', companyId);
     }
   }
+
+  // ========================================================
+  // 🚀 NEW: WRITE TO THE HOOK LEDGER (DROP ACTION)
+  // ========================================================
+  const dropRecords = [
+    { company_id: companyId, truck_id: selectedAsset.id, trailer_id: selectedAsset.hooked_trailer_id, action: 'DROPPED', odometer: endOdo }
+  ];
+  if (selectedAsset.hooked_trailer_2_id) {
+    dropRecords.push({ company_id: companyId, truck_id: selectedAsset.id, trailer_id: selectedAsset.hooked_trailer_2_id, action: 'DROPPED', odometer: endOdo });
+  }
+  supabase.from('trailer_hook_history').insert(dropRecords).then(({error}) => {
+    if (error) console.error("Drop Ledger Error:", error);
+  });
+  // ========================================================
 
   const { error } = await supabase.from('vehicles').update({ 
     hooked_trailer_id: null, 
@@ -479,6 +588,7 @@ const handleUpdateAsset = async (e) => {
     setIsProcessingDrop(false);
     return alert(`DATABASE ERROR: Could not release kingpin. \n\nDetails: ${error.message}`);
   }
+  
   // ==========================================
   // 🚀 NEW: WRITE TO THE AUDIT LEDGER (DROP)
   // ==========================================
@@ -542,6 +652,20 @@ const executeCloseTrip = async () => {
       return alert("Ending Odometer must be greater than starting Odometer!");
     }
 
+    // ==========================================
+    // 🚀 FIXED: 5000km CUSTOM RED WARNING (ROUND TRIP)
+    // ==========================================
+    if (tripDistance >= 5000) {
+      // This pauses the code and waits BEFORE touching the database
+      const confirmLargeJump = await triggerOdoWarning(endOdo, startOdo, tripDistance, 'ROUND_TRIP');
+      
+      if (!confirmLargeJump) {
+        setIsProcessingTrip(false); 
+        return; // Aborts the save entirely
+      }
+    }
+    // ==========================================
+
     // 1. Insert to Ledger
     const { error: tripError } = await supabase.from('trips').insert([{
       company_id: companyId,
@@ -567,37 +691,38 @@ const executeCloseTrip = async () => {
       total_mileage: endOdo,
       hook_odometer: endOdo // <-- This is the magic reset!
     }).eq('id', selectedAsset.id).eq('company_id', companyId); 
+
     // ==========================================
-  // 🚀 NEW: WRITE TO THE AUDIT LEDGER (ROUND TRIP)
-  // ==========================================
-  const auditLogs = [];
-  
-  auditLogs.push({
-    company_id: companyId, vehicle_id: selectedAsset.id,
-    previous_odo: parseFloat(selectedAsset.total_mileage || 0), new_odo: endOdo,
-    source: 'ROUND_TRIP_LOGGED'
-  });
-  
-  if (trailer1) {
+    // 🚀 NEW: WRITE TO THE AUDIT LEDGER (ROUND TRIP)
+    // ==========================================
+    const auditLogs = [];
+    
     auditLogs.push({
-      company_id: companyId, vehicle_id: trailer1.id,
-      previous_odo: parseFloat(trailer1.total_mileage || 0), new_odo: parseFloat(trailer1.total_mileage || 0) + tripDistance,
+      company_id: companyId, vehicle_id: selectedAsset.id,
+      previous_odo: parseFloat(selectedAsset.total_mileage || 0), new_odo: endOdo,
       source: 'ROUND_TRIP_LOGGED'
     });
-  }
-  
-  if (selectedAsset.hooked_trailer_2_id) {
-    const trailer2 = assets.find(a => a.id === selectedAsset.hooked_trailer_2_id);
-    if (trailer2) {
+    
+    if (trailer1) {
       auditLogs.push({
-        company_id: companyId, vehicle_id: trailer2.id,
-        previous_odo: parseFloat(trailer2.total_mileage || 0), new_odo: parseFloat(trailer2.total_mileage || 0) + tripDistance,
+        company_id: companyId, vehicle_id: trailer1.id,
+        previous_odo: parseFloat(trailer1.total_mileage || 0), new_odo: parseFloat(trailer1.total_mileage || 0) + tripDistance,
         source: 'ROUND_TRIP_LOGGED'
       });
     }
-  }
+    
+    if (selectedAsset.hooked_trailer_2_id) {
+      const trailer2 = assets.find(a => a.id === selectedAsset.hooked_trailer_2_id);
+      if (trailer2) {
+        auditLogs.push({
+          company_id: companyId, vehicle_id: trailer2.id,
+          previous_odo: parseFloat(trailer2.total_mileage || 0), new_odo: parseFloat(trailer2.total_mileage || 0) + tripDistance,
+          source: 'ROUND_TRIP_LOGGED'
+        });
+      }
+    }
 
-  await supabase.from('vehicle_odometer_history').insert(auditLogs);
+    await supabase.from('vehicle_odometer_history').insert(auditLogs);
 
     // Show the success badge using the same tripResult state
     setTripResult(tripDistance);
@@ -612,7 +737,7 @@ const executeCloseTrip = async () => {
       setTripResult(null);
       setIsProcessingTrip(false);
     }, 3500);
-  };
+};
   const executeFuelLog = async () => {
     if (!fuelData.volume) return alert("Please enter the fuel volume.");
     if (!walkaroundOdo) return alert("Please enter the Current Dash Odometer at the top of the screen before logging fuel.");
@@ -996,6 +1121,11 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
                       className="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-3 text-gray-500 font-black text-lg outline-none cursor-not-allowed"
                     />
                     <p className="text-[10px] text-gray-500 mt-2 uppercase font-bold tracking-wider">Calculated automatically on Drop</p>
+                    
+                    {/* 🚀 NEW: VIEW HOOK HISTORY BUTTON */}
+                    <button onClick={fetchHookHistory} className="text-[10px] text-green-400 font-bold uppercase tracking-widest mt-4 hover:text-green-300 transition-colors flex items-center gap-1">
+                      🔗 VIEW HOOK HISTORY
+                    </button>
                   </>
                 )}
               </div>
@@ -1147,10 +1277,16 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
       <>
         <p className="text-gray-300 font-bold text-sm">Enter Dash Odometer to calculate trailer trip mileage.</p>
         <input 
-          type="number" 
+          type="text" 
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={dropOdometer || ''} 
           disabled={isProcessingDrop} 
           placeholder="Current Odometer (km)" 
-          onChange={(e) => setDropOdometer(e.target.value)} 
+          onChange={(e) => {
+            const numericValue = e.target.value.replace(/[^0-9]/g, '');
+            setDropOdometer(numericValue);
+          }} 
           className="w-full bg-gray-900 border-2 border-gray-600 rounded-xl h-14 px-4 text-xl font-black text-white focus:border-red-500 disabled:opacity-50" 
         />
         <div className="flex gap-2">
@@ -1450,6 +1586,134 @@ const tyreOdoToLog = !isSpare ? parseFloat(tyre.virtual_mileage || 0) : null;
       </div>
     </div>
   )}
+  {/* ==========================================
+          🚀 NEW: HOOK HISTORY MODAL 
+          ========================================== */}
+      {showHookHistory && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl relative overflow-hidden">
+            
+            {/* Close Button */}
+            <button onClick={() => setShowHookHistory(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <h3 className="text-xl font-black text-white uppercase tracking-widest mb-1 flex items-center gap-2">
+              🔗 Hook Ledger
+            </h3>
+            <p className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-6">
+              {selectedAsset?.fleet_number} • Recent Activity
+            </p>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+              {isFetchingHookHistory ? (
+                <div className="text-center py-10 text-gray-500 font-bold animate-pulse">Loading ledger...</div>
+              ) : hookHistoryData.length === 0 ? (
+                <div className="text-center py-10 text-gray-500 italic">No hooking history found for this trailer yet.</div>
+              ) : (
+                hookHistoryData.map((record) => {
+                  // Find the truck fleet number in memory so we don't need complex DB joins!
+                  const truck = assets.find(a => String(a.id) === String(record.truck_id));
+                  const truckName = truck ? truck.fleet_number : `Truck ID ${record.truck_id}`;
+                  const isHook = record.action === 'HOOKED';
+
+                  return (
+                    <div key={record.id} className={`p-4 rounded-xl border ${isHook ? 'bg-indigo-900/20 border-indigo-500/30' : 'bg-gray-800 border-gray-700'} flex justify-between items-center`}>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase tracking-widest ${isHook ? 'bg-indigo-500/20 text-indigo-400' : 'bg-gray-700 text-gray-400'}`}>
+                            {record.action}
+                          </span>
+                          <span className="text-white font-bold">{truckName}</span>
+                        </div>
+                        <p className="text-xs text-gray-500 font-bold">
+                          {new Date(record.created_at).toLocaleDateString()} @ {new Date(record.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-400 uppercase tracking-widest">Dash Odo</p>
+                        <p className="text-white font-black">{Number(record.odometer).toLocaleString()} <span className="text-gray-500 text-[10px]">km</span></p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ==========================================
+          🚀 NEW: CUSTOM RED ODOMETER WARNING MODAL 
+          ========================================== */}
+      {odoWarning?.isOpen && (
+        <div className="fixed inset-0 bg-red-950/90 flex items-center justify-center p-4 z-9999 animate-fade-in backdrop-blur-sm">
+          <div className="bg-gray-900 border-2 border-red-600 rounded-3xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(220,38,38,0.3)] relative overflow-hidden text-center">
+            
+            <div className="absolute top-0 left-0 w-full h-2 bg-red-600 animate-pulse"></div>
+
+            <div className="text-red-500 text-6xl mb-4 flex justify-center">
+              <svg className="w-20 h-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            
+            <h3 className="text-3xl font-black text-white uppercase tracking-widest mb-4">
+              Stop!
+            </h3>
+            
+            <div className="bg-gray-800 rounded-xl p-4 mb-6 text-sm text-gray-300">
+              <p className="mb-3">
+                {odoWarning.type === 'DROP' 
+                  ? "This drop will log a massive single trip of:" 
+                  : odoWarning.type === 'ROUND_TRIP'
+                  ? "This round trip will log a massive distance of:"
+                  : "You are attempting to log a massive mileage jump of:"}
+              </p>
+              <p className="text-4xl font-black text-red-500 mb-3">
+                {Number(odoWarning.diff).toLocaleString()} <span className="text-xl text-gray-400">km</span>
+              </p>
+              <div className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-700">
+                <div className="text-left">
+                  <p className="text-[10px] uppercase text-gray-500 font-bold tracking-widest">Previous</p>
+                  <p className="text-white font-bold">{Number(odoWarning.current).toLocaleString()}</p>
+                </div>
+                <div className="text-gray-600">→</div>
+                <div className="text-right">
+                  <p className="text-[10px] uppercase text-gray-500 font-bold tracking-widest">New Entry</p>
+                  <p className="text-white font-bold">{Number(odoWarning.entered).toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-white font-bold mb-6">Are you absolutely sure this is correct?</p>
+
+            <div className="flex gap-4">
+              <button 
+                onClick={() => {
+                  if (warningResolver) warningResolver.resolve(false);
+                  setOdoWarning({ isOpen: false, entered: 0, current: 0, diff: 0, type: '' });
+                  setTimeout(() => { if (document.activeElement) document.activeElement.blur(); }, 50);
+                }} 
+                className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-black uppercase tracking-widest py-4 rounded-xl transition-colors border border-gray-600"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (warningResolver) warningResolver.resolve(true);
+                  setOdoWarning({ isOpen: false, entered: 0, current: 0, diff: 0, type: '' });
+                  setTimeout(() => { if (document.activeElement) document.activeElement.blur(); }, 50);
+                }} 
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest py-4 rounded-xl transition-colors shadow-[0_0_20px_rgba(220,38,38,0.4)]"
+              >
+                Yes, Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
