@@ -116,63 +116,69 @@ const openHistoryModal = async (driver) => {
   };
 
  // Save Driver
-  const handleSave = async (e) => {
-    e.preventDefault();
-    const payload = { ...formData, company_id: companyId };
-    
-    // Clean empty strings to null for date fields to prevent DB errors
-    Object.keys(payload).forEach(key => {
-      if (payload[key] === '') payload[key] = null;
-    });
+const handleSave = async (e) => {
+  e.preventDefault();
+  const payload = { ...formData, company_id: companyId };
+  
+  // 🚀 EXTRACT HISTORY DATA SAFELY
+  const historyStartDate = payload.status_start_date || new Date().toISOString().split('T')[0];
+  const historyEndDate = payload.status_end_date || null;
+  const historyReason = payload.status_reason || null;
+  
+  // Remove them from payload so they don't crash the drivers table
+  delete payload.status_start_date;
+  delete payload.status_end_date;
+  delete payload.status_reason;
 
-    let currentDriverId = editingId;
-    let statusChanged = false;
+  // Clean empty strings to null for date fields
+  Object.keys(payload).forEach(key => {
+    if (payload[key] === '') payload[key] = null;
+  });
 
-    if (editingId) {
-      // 🚀 Check if the status actually changed by looking at the existing driver list
-      const originalDriver = drivers.find(d => d.id === editingId);
-      if (originalDriver && originalDriver.status !== payload.status) {
-        statusChanged = true;
-      }
+  let currentDriverId = editingId;
+  let statusChanged = false;
 
-      const { error } = await supabase.from('drivers').update(payload).eq('id', editingId).eq('company_id', companyId);
-      if (error) {
-        alert("Error updating driver: " + error.message);
-        return; // Stop here if it fails
-      }
-    } else {
-      // 🚀 Always log the initial status for brand new drivers
-      statusChanged = true; 
-      
-      // We add .select() here to immediately get the newly generated ID back from the database
-      const { data, error } = await supabase.from('drivers').insert([payload]).select();
-      
-      if (error) {
-        alert("Error adding driver: " + error.message);
-        return; // Stop here if it fails
-      } else {
-        currentDriverId = data[0].id;
-        localStorage.removeItem('stc_driver_draft'); // WIPE DRAFT ON SUCCESS
-      }
+  // UPDATE OR INSERT THE DRIVER
+  if (editingId) {
+    const originalDriver = drivers.find(d => d.id === editingId);
+    if (originalDriver && originalDriver.status !== payload.status) {
+      statusChanged = true;
     }
-    
-    // 🚀 NEW: LOG TO THE HISTORY TABLE IF THE STATUS CHANGED
-    if (statusChanged && currentDriverId) {
-      const { error: historyError } = await supabase
-        .from('driver_status_history')
-        .insert([{
-          driver_id: currentDriverId,
-          status: payload.status,
-          start_date: new Date().toISOString().split('T')[0] // Stamps today's date automatically
-        }]);
-        
-      if (historyError) console.error("Error logging status history:", historyError.message);
+    const { error } = await supabase.from('drivers').update(payload).eq('id', editingId).eq('company_id', companyId);
+    if (error) { alert("Error updating driver: " + error.message); return; }
+  } else {
+    statusChanged = true; 
+    const { data, error } = await supabase.from('drivers').insert([payload]).select();
+    if (error) { alert("Error adding driver: " + error.message); return; } 
+    else {
+      currentDriverId = data[0].id;
+      localStorage.removeItem('stc_driver_draft'); 
     }
+  }
+  
+  // 🚀 LOG THE HISTORY (Crash-proof)
+  if (statusChanged && currentDriverId) {
+    const finalReason = (payload.status === 'ACTIVE' && editingId) ? 'Returned to Active duty' : historyReason;
     
-    setIsModalOpen(false);
-    fetchDrivers();
-  };
-
+    const { error: historyError } = await supabase
+      .from('driver_status_history')
+      .insert([{
+        driver_id: currentDriverId,
+        status: payload.status,
+        start_date: historyStartDate,
+        end_date: historyEndDate,
+        reason: finalReason
+      }]);
+      
+    if (historyError) {
+      console.error("Failed to save history:", historyError.message);
+    }
+  }
+  
+  // CLOSE MODAL & REFRESH DATA
+  setIsModalOpen(false);
+  fetchDrivers();
+};
   // Delete Driver
   const handleDelete = async (id, name) => {
     if (!window.confirm(`DANGER: Are you sure you want to permanently delete ${name}?`)) return;
@@ -341,35 +347,52 @@ const openHistoryModal = async (driver) => {
             <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-8 flex-1">
               
               {/* SECTION 1: IDENTITY */}
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-                <h3 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">1. Identity & Employment</h3>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">First Name *</label><input required name="first_name" value={formData.first_name} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Last Name *</label><input required name="last_name" value={formData.last_name} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Date of Birth</label><input type="date" name="date_of_birth" value={formData.date_of_birth || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Employee ID</label><input name="employee_id" value={formData.employee_id || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                  
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Primary Phone</label><input name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Alternate Phone</label><input name="phone_number_2" placeholder="e.g. Zim/SA Roaming" value={formData.phone_number_2 || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                  
-                  {/* 🚀 NEW: PHYSICAL ADDRESS (Spans 2 columns for extra width) */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Physical Address</label>
-                    <input name="address" placeholder="123 Main St, Suburb, City" value={formData.address || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs font-bold text-gray-500 mb-1">Status</label>
-                    <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-bold outline-none focus:border-indigo-500">
-                      <option value="ACTIVE">ACTIVE</option>
-                      <option value="ON LEAVE">ON LEAVE</option>
-                      <option value="SUSPENDED">SUSPENDED</option>
-                      <option value="TERMINATED">TERMINATED</option>
-                    </select>
-                  </div>
-                  <div><label className="block text-xs font-bold text-gray-500 mb-1">Date of Hire</label><input type="date" name="date_of_hire" value={formData.date_of_hire || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
-                </div>
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+            <h3 className="text-xs font-black text-indigo-600 uppercase tracking-widest border-b border-gray-100 pb-2 mb-4">1. Identity & Employment</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div><label className="block text-xs font-bold text-gray-500 mb-1">First Name *</label><input required name="first_name" value={formData.first_name} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              <div><label className="block text-xs font-bold text-gray-500 mb-1">Last Name *</label><input required name="last_name" value={formData.last_name} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              <div><label className="block text-xs font-bold text-gray-500 mb-1">Date of Birth</label><input type="date" name="date_of_birth" value={formData.date_of_birth || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              <div><label className="block text-xs font-bold text-gray-500 mb-1">Employee ID</label><input name="employee_id" value={formData.employee_id || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              
+              <div><label className="block text-xs font-bold text-gray-500 mb-1">Primary Phone</label><input name="phone_number" value={formData.phone_number || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              <div><label className="block text-xs font-bold text-gray-500 mb-1">Alternate Phone</label><input name="phone_number_2" placeholder="e.g. Zim/SA Roaming" value={formData.phone_number_2 || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-gray-500 mb-1">Physical Address</label>
+                <input name="address" placeholder="123 Main St, Suburb, City" value={formData.address || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" />
               </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Status</label>
+                <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-bold outline-none focus:border-indigo-500">
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="ON LEAVE">ON LEAVE</option>
+                  <option value="SUSPENDED">SUSPENDED</option>
+                  <option value="TERMINATED">TERMINATED</option>
+                </select>
+              </div>
+              <div><label className="block text-xs font-bold text-gray-500 mb-1">Date of Hire</label><input type="date" name="date_of_hire" value={formData.date_of_hire || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              
+              {/* 🚀 CONDITIONAL STATUS TRACKING FIELDS */}
+              {formData.status !== 'ACTIVE' && (
+                <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 mt-2 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                  <div>
+                    <label className="block text-xs font-black text-orange-800 mb-1">Effective Date</label>
+                    <input type="date" name="status_start_date" value={formData.status_start_date || ''} onChange={handleChange} className="w-full p-2 border-2 border-orange-300 rounded bg-white font-bold outline-none focus:border-orange-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-orange-800 mb-1">Expected Return</label>
+                    <input type="date" name="status_end_date" value={formData.status_end_date || ''} onChange={handleChange} className="w-full p-2 border-2 border-orange-300 rounded bg-white font-bold outline-none focus:border-orange-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-orange-800 mb-1">Reason / Notes</label>
+                    <input type="text" placeholder="e.g. Disciplinary, Annual Leave" name="status_reason" value={formData.status_reason || ''} onChange={handleChange} className="w-full p-2 border-2 border-orange-300 rounded bg-white font-bold outline-none focus:border-orange-500" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
               {/* SECTION 2: CORE LICENSING */}
               <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
