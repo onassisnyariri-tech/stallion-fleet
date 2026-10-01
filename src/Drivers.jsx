@@ -255,6 +255,7 @@ const handleSave = async (e) => {
     <option value="ON LEAVE">On Leave</option>
     <option value="SUSPENDED">Suspended</option>
     <option value="TERMINATED">Terminated</option>
+    <option value="RESIGNED">Resigned</option> {/* 🚀 ADDED HERE */}
     <option value="ALL">All Statuses</option>
   </select>
   
@@ -370,6 +371,7 @@ const handleSave = async (e) => {
                   <option value="ON LEAVE">ON LEAVE</option>
                   <option value="SUSPENDED">SUSPENDED</option>
                   <option value="TERMINATED">TERMINATED</option>
+                  <option value="RESIGNED">RESIGNED</option> {/* 🚀 ADDED HERE */}
                 </select>
               </div>
               <div><label className="block text-xs font-bold text-gray-500 mb-1">Date of Hire</label><input type="date" name="date_of_hire" value={formData.date_of_hire || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
