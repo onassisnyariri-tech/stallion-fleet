@@ -56,9 +56,48 @@ const openHistoryModal = async (driver) => {
     passport_number: '', passport_country: '', passport_issue_date: '', passport_expiry_date: '', 
     visa_permit_type: '', visa_permit_country: '', visa_permit_expiry_date: '',
     prdp_type: 'Goods', prdp_expiry_date: '', medical_cert_expiry_date: '', defensive_driving_expiry_date: '', 
-    police_clearance_expiry_date: '', hazchem_expiry_date: ''
+    police_clearance_expiry_date: '', hazchem_expiry_date: '',
+    leave_days_taken: 0, 
+    sick_days_taken: 0
   };
   const [formData, setFormData] = useState(initialFormState);
+  // 🚀 NEW: LEAVE CALCULATOR STATE & LOGIC
+const [calculatedLeave, setCalculatedLeave] = useState(0);
+
+useEffect(() => {
+  if (formData.status_start_date && formData.status_end_date) {
+    const start = new Date(formData.status_start_date);
+    const end = new Date(formData.status_end_date);
+    let count = 0;
+    let curr = new Date(start);
+    
+    // Hardcoded SA Public Holidays for 2026
+    const saHolidays = [
+      '2026-01-01', '2026-03-21', '2026-04-03', '2026-04-06', 
+      '2026-04-27', '2026-05-01', '2026-06-16', '2026-08-09', 
+      '2026-08-10', '2026-09-24', '2026-12-16', '2026-12-25', '2026-12-26'
+    ];
+
+    while (curr <= end) {
+      const day = curr.getDay(); // 0 is Sunday
+      // Safely format date to YYYY-MM-DD for comparison
+      const dateStr = [
+        curr.getFullYear(), 
+        String(curr.getMonth() + 1).padStart(2, '0'), 
+        String(curr.getDate()).padStart(2, '0')
+      ].join('-');
+      
+      // Skip Sundays (0) and SA Public Holidays
+      if (day !== 0 && !saHolidays.includes(dateStr)) {
+        count++;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    setCalculatedLeave(count);
+  } else {
+    setCalculatedLeave(0);
+  }
+}, [formData.status_start_date, formData.status_end_date]);
 
   // Fetch Drivers
   const fetchDrivers = async () => {
@@ -256,6 +295,7 @@ const handleSave = async (e) => {
     <option value="SUSPENDED">Suspended</option>
     <option value="TERMINATED">Terminated</option>
     <option value="RESIGNED">Resigned</option> {/* 🚀 ADDED HERE */}
+    <option value="SICK">Sick</option>
     <option value="ALL">All Statuses</option>
   </select>
   
@@ -309,6 +349,15 @@ const handleSave = async (e) => {
                     <span>📞 {driver.phone_number || 'No primary phone'}</span>
                     {driver.phone_number_2 && <span className="text-gray-500">📱 {driver.phone_number_2} (Alt)</span>}
                   </div>
+                  {/* 🚀 FIXED: 6-DAY WEEK LEAVE & SICK TRACKERS */}
+<div className="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+  <div className="flex-1 bg-blue-50 text-blue-800 px-3 py-2 rounded text-[10px] uppercase tracking-widest font-black border border-blue-200 text-center">
+    Leave: <span className="text-sm">{driver.leave_days_taken || 0}</span> taken • <span className="text-sm">{21 - (driver.leave_days_taken || 0)}</span> left
+  </div>
+  <div className="flex-1 bg-orange-50 text-orange-800 px-3 py-2 rounded text-[10px] uppercase tracking-widest font-black border border-orange-200 text-center">
+    Sick: <span className="text-sm">{driver.sick_days_taken || 0}</span> taken • <span className="text-sm">{36 - (driver.sick_days_taken || 0)}</span> left
+  </div>
+</div>
                   
                   {/* COMPLIANCE ALERTS */}
                   {expiries.length > 0 && (
@@ -369,14 +418,29 @@ const handleSave = async (e) => {
                 <select name="status" value={formData.status} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-bold outline-none focus:border-indigo-500">
                   <option value="ACTIVE">ACTIVE</option>
                   <option value="ON LEAVE">ON LEAVE</option>
+                  <option value="SICK">SICK</option>
                   <option value="SUSPENDED">SUSPENDED</option>
                   <option value="TERMINATED">TERMINATED</option>
-                  <option value="RESIGNED">RESIGNED</option> {/* 🚀 ADDED HERE */}
+                  <option value="RESIGNED">RESIGNED</option>
                 </select>
               </div>
-              <div><label className="block text-xs font-bold text-gray-500 mb-1">Date of Hire</label><input type="date" name="date_of_hire" value={formData.date_of_hire || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" /></div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">Date of Hire</label>
+                <input type="date" name="date_of_hire" value={formData.date_of_hire || ''} onChange={handleChange} className="w-full p-2 border rounded bg-gray-50 font-medium outline-none focus:border-indigo-500" />
+              </div>
+              {/* 🚀 VISUAL TALLY BOXES FOR LEAVE & SICK DAYS */}
+              <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+                <div>
+                  <label className="block text-xs font-black text-blue-600 mb-1">Total Annual Leave Taken</label>
+                  <input type="number" step="0.5" name="leave_days_taken" value={formData.leave_days_taken || 0} onChange={handleChange} className="w-full p-2 border-2 border-blue-200 rounded bg-blue-50 font-bold outline-none focus:border-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-orange-600 mb-1">Total Sick Days Taken (3-Yr Cycle)</label>
+                  <input type="number" step="0.5" name="sick_days_taken" value={formData.sick_days_taken || 0} onChange={handleChange} className="w-full p-2 border-2 border-orange-200 rounded bg-orange-50 font-bold outline-none focus:border-orange-500" />
+                </div>
+              </div>
               
-              {/* 🚀 CONDITIONAL STATUS TRACKING FIELDS */}
+              {/* 🚀 CONDITIONAL STATUS TRACKING FIELDS WITH INTEGRATED CALCULATOR */}
               {formData.status !== 'ACTIVE' && (
                 <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4 mt-2 p-4 bg-orange-50 border border-orange-200 rounded-lg">
                   <div>
@@ -391,6 +455,30 @@ const handleSave = async (e) => {
                     <label className="block text-xs font-black text-orange-800 mb-1">Reason / Notes</label>
                     <input type="text" placeholder="e.g. Disciplinary, Annual Leave" name="status_reason" value={formData.status_reason || ''} onChange={handleChange} className="w-full p-2 border-2 border-orange-300 rounded bg-white font-bold outline-none focus:border-orange-500" />
                   </div>
+
+                  {/* 🚀 LEAVE CALCULATOR POPUP (INSIDE THE ORANGE CONTAINER) */}
+                  {calculatedLeave > 0 && (
+                    <div className="md:col-span-3 bg-blue-100 p-3 rounded-lg flex flex-col md:flex-row items-center justify-between border border-blue-200 mt-2 gap-3">
+                      <span className="text-sm font-bold text-blue-800">
+                        📅 Date range equals <strong>{calculatedLeave} working days</strong> (excluding Sundays & SA Public Holidays).
+                      </span>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const targetField = formData.status === 'SICK' ? 'sick_days_taken' : 'leave_days_taken';
+                          const currentTargetTotal = Number(formData[targetField] || 0);
+                          
+                          setFormData({ 
+                            ...formData, 
+                            [targetField]: currentTargetTotal + calculatedLeave 
+                          });
+                        }}
+                        className="bg-blue-600 text-white px-4 py-2 rounded font-black text-xs uppercase tracking-widest hover:bg-blue-700 whitespace-nowrap shadow-sm"
+                      >
+                        + Add to Total
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
