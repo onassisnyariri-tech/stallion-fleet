@@ -213,7 +213,7 @@ export default function ExecutiveDashboard({ companyId, setActiveTab, hideFinanc
             nextDue.setDate(nextDue.getDate() + (Number(task.interval_days) || 0));
             const diffDays = Math.ceil((nextDue - today) / (1000 * 60 * 60 * 24));
             
-            if (diffDays <= 14) {
+            if (diffDays <= 30) {
               isDue = true;
               typeLabel = 'Calendar';
               detailStr = diffDays < 0 ? 'OVERDUE' : diffDays === 0 ? 'TODAY' : `${diffDays} days left`;
@@ -224,7 +224,7 @@ export default function ExecutiveDashboard({ companyId, setActiveTab, hideFinanc
             const nextDue = Number(lastOdoVal) + Number(task.interval_km || 0);
             const kmRemaining = nextDue - currentOdo;
             
-            if (kmRemaining <= 500) {
+            if (kmRemaining <= 1000) {
               isDue = true;
               typeLabel = 'Odometer';
               detailStr = kmRemaining < 0 ? 'OVERDUE' : `${kmRemaining} km left`;

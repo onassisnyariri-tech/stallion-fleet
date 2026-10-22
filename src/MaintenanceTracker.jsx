@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import { useReactToPrint } from 'react-to-print';
 
 export default function MaintenanceTracker({ companyId }) {
   const [vehicles, setVehicles] = useState([]);
@@ -7,7 +8,7 @@ export default function MaintenanceTracker({ companyId }) {
   const [selectedVehicleId, setSelectedVehicleId] = useState(null);
   
   const [rosterSearch, setRosterSearch] = useState('');
-  // 🚀 READ DASHBOARD INSTRUCTION AND PUT IT IN YOUR EXISTING SEARCH
+  
   useEffect(() => {
     const autoSearch = sessionStorage.getItem('stc_auto_search');
     if (autoSearch) {
@@ -22,7 +23,15 @@ export default function MaintenanceTracker({ companyId }) {
   const [newOdo, setNewOdo] = useState('');
   const [taskName, setTaskName] = useState('');
   const [taskCategory, setTaskCategory] = useState('ADMIN'); 
-  
+
+  // 🚀 NATIVE PDF SETUP (Only declared ONCE here)
+  const historyModalRef = useRef(null);
+  // 🚀 FIXED: New V3 Syntax using 'contentRef'
+  const downloadHistoryPDF = useReactToPrint({
+    contentRef: historyModalRef, 
+    documentTitle: `Maintenance_History_${selectedVehicle?.fleet_number || 'Report'}`,
+  });
+ 
   // The KM / DATE tracking states
   const [trackingType, setTrackingType] = useState('KM'); 
   const [taskInterval, setTaskInterval] = useState(''); 
@@ -34,21 +43,19 @@ export default function MaintenanceTracker({ companyId }) {
   const [logDoneTarget, setLogDoneTarget] = useState(null);
   const [logDoneDate, setLogDoneDate] = useState('');
   const [logDoneOdo, setLogDoneOdo] = useState('');
-  const [logDoneName, setLogDoneName] = useState(''); // 🚀 NEW: Tracks the editable name
+  const [logDoneName, setLogDoneName] = useState(''); 
 
   // State for the Export Modal
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportMode, setExportMode] = useState('ALL'); 
   const [exportSelectedVehicles, setExportSelectedVehicles] = useState([]);
 
-  // 🚀 NEW: State for the History Modal
+  // State for the History Modal
   const [historyTarget, setHistoryTarget] = useState(null);
   const [taskHistoryLogs, setTaskHistoryLogs] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  // 🚀 1. ADD SEARCH STATE
   const [searchTerm, setSearchTerm] = useState('');
   
-  // 🚀 2. READ DASHBOARD INSTRUCTION ON LOAD
   useEffect(() => {
     const autoSearch = sessionStorage.getItem('stc_auto_search');
     if (autoSearch) {
@@ -57,13 +64,10 @@ export default function MaintenanceTracker({ companyId }) {
     }
   }, []);
 
- useEffect(() => {
-    // 🚀 HARD RESET: Wipe the old company's data from the screen
+  useEffect(() => {
     setTasks([]);
     setVehicles([]);
     setSelectedVehicleId(null);
-    
-    // Fetch the new company's data
     if (companyId) fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]); 
@@ -125,7 +129,7 @@ export default function MaintenanceTracker({ companyId }) {
 
   const openLogDoneModal = (task) => {
     setLogDoneTarget(task);
-    setLogDoneName(task.service_name || ''); // 🚀 Pre-fills the input with current name
+    setLogDoneName(task.service_name || ''); 
     if (task.tracking_type === 'DATE') {
       setLogDoneDate(new Date().toISOString().split('T')[0]); 
     } else {
@@ -133,19 +137,17 @@ export default function MaintenanceTracker({ companyId }) {
     }
   };
 
-  // 🚀 UPDATED: Now writes to both pm_tasks and pm_history
   const executeLogDone = async () => {
-    // Grab the edited name (or fall back to the original if they accidentally cleared it)
     const finalServiceName = logDoneName.trim() || logDoneTarget.service_name;
 
     let updatePayload = {
-      service_name: finalServiceName // 🚀 Updates the live tracker name for the next cycle
+      service_name: finalServiceName 
     };
     let historyPayload = {
       company_id: companyId,
       vehicle_id: logDoneTarget.vehicle_id,
       task_id: logDoneTarget.id,
-      service_name: finalServiceName, // 🚀 Logs the history under the exact name you just typed
+      service_name: finalServiceName, 
       category: logDoneTarget.category || 'ADMIN',
       tracking_type: logDoneTarget.tracking_type
     };
@@ -160,16 +162,14 @@ export default function MaintenanceTracker({ companyId }) {
       historyPayload.completed_odo = parseFloat(logDoneOdo);
     }
 
-    // 1. Update the live dashboard snapshot
     const { error: updateError } = await supabase.from('pm_tasks').update(updatePayload).eq('id', logDoneTarget.id).eq('company_id', companyId);
     if (updateError) return alert(`DATABASE ERROR: Could not log service.\n\nDetails: ${updateError.message}`);
     
-    // 2. Write the permanent historical ledger entry
     const { error: historyError } = await supabase.from('pm_history').insert([historyPayload]);
     if (historyError) {
-  alert(`HISTORY TABLE ERROR: ${historyError.message}`);
-  return; 
-}
+      alert(`HISTORY TABLE ERROR: ${historyError.message}`);
+      return; 
+    }
 
     setLogDoneTarget(null);
     fetchData();
@@ -182,7 +182,6 @@ export default function MaintenanceTracker({ companyId }) {
     fetchData();
   };
 
-  // 🚀 NEW: Load history for a specific task
   const openHistoryModal = async (task) => {
     setHistoryTarget(task);
     setIsLoadingHistory(true);
@@ -213,7 +212,8 @@ export default function MaintenanceTracker({ companyId }) {
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       
       if (diffDays < 0) return { level: 'OVERDUE', days: diffDays, color: 'border-red-500 bg-red-50 text-red-800', bar: 'bg-red-500' };
-      if (diffDays <= 14) return { level: 'ACTION', days: diffDays, color: 'border-yellow-500 bg-yellow-50 text-yellow-800', bar: 'bg-yellow-500' };
+      // 🚀 CHANGED from 14 to 30 days
+      if (diffDays <= 30) return { level: 'ACTION', days: diffDays, color: 'border-yellow-500 bg-yellow-50 text-yellow-800', bar: 'bg-yellow-500' };
       return { level: 'OK', days: diffDays, color: 'border-green-500 bg-green-50 text-green-800', bar: 'bg-green-500' };
     } else {
       const currentOdo = vehicleToUse?.total_mileage || 0;
@@ -221,7 +221,8 @@ export default function MaintenanceTracker({ companyId }) {
       const kmRemaining = nextDue - currentOdo;
 
       if (kmRemaining < 0) return { level: 'OVERDUE', km: kmRemaining, color: 'border-red-500 bg-red-50 text-red-800', bar: 'bg-red-500' };
-      if (kmRemaining <= 500) return { level: 'ACTION', km: kmRemaining, color: 'border-yellow-500 bg-yellow-50 text-yellow-800', bar: 'bg-yellow-500' };
+      // 🚀 CHANGED from 500km to 1000km
+      if (kmRemaining <= 1000) return { level: 'ACTION', km: kmRemaining, color: 'border-yellow-500 bg-yellow-50 text-yellow-800', bar: 'bg-yellow-500' };
       return { level: 'OK', km: kmRemaining, color: 'border-green-500 bg-green-50 text-green-800', bar: 'bg-green-500' };
     }
   };
@@ -317,35 +318,29 @@ export default function MaintenanceTracker({ companyId }) {
 
   const vehicleTasks = tasks.filter(t => String(t.vehicle_id) === String(selectedVehicleId));
 
-// 🚀 THE NEW UNIVERSAL URGENCY SORTER
   const sortTasksByUrgency = (taskList) => {
     return taskList.sort((a, b) => {
       const getRemainingScore = (task) => {
         if (task.tracking_type === 'DATE') {
-          // Calculate exact absolute days remaining
           const lastDate = new Date(task.last_service_date || new Date());
           const today = new Date();
           const nextDue = new Date(lastDate);
           nextDue.setDate(nextDue.getDate() + (task.interval_days || 0));
           return Math.ceil((nextDue - today) / (1000 * 60 * 60 * 24));
         } else {
-          // Calculate exact absolute KM remaining
           const currentOdo = selectedVehicle?.total_mileage || 0;
           const nextDue = (task.last_service_odo || 0) + (task.interval_km || 0);
           const kmRemaining = nextDue - currentOdo;
           
-          // Standardize KM to a "Days Equivalent" for mixed lists
-          // (Assuming 500km triggers the same 14-day warning tier)
-          return kmRemaining / (500 / 14); 
+          // 🚀 CHANGED: Standardize KM to a "Days Equivalent" 
+          // (Assuming 1000km triggers the same 30-day warning tier)
+          return kmRemaining / (1000 / 30); 
         }
       };
-
-      // Sort Ascending: Lowest remaining value (most urgent/overdue) goes to the top!
       return getRemainingScore(a) - getRemainingScore(b);
     });
   };
 
-  // 🚀 Apply the sorter to both categories automatically
   const adminTasks = sortTasksByUrgency(
     vehicleTasks.filter(t => !t.category || String(t.category).toUpperCase() === 'ADMIN')
   );
@@ -577,7 +572,6 @@ export default function MaintenanceTracker({ companyId }) {
             </div>
             
             <div className="p-6 bg-teal-50/30">
-              {/* 🚀 THE NEW EDITABLE NAME FIELD */}
               <div className="mb-5">
                 <label className="block text-xs font-black text-teal-800 uppercase tracking-widest mb-1">Requirement Name</label>
                 <input 
@@ -593,7 +587,6 @@ export default function MaintenanceTracker({ companyId }) {
                 Confirm the exact {logDoneTarget.tracking_type === 'DATE' ? 'date' : 'odometer'} this requirement was fulfilled. This will reset the tracking interval AND save a permanent record to the historical ledger.
               </p>
 
-              {/* ORIGINAL DATE / ODO INPUTS KEEP WORKING HERE */}
               {logDoneTarget.tracking_type === 'DATE' ? (
                 <div>
                   <label className="block text-xs font-black text-teal-800 uppercase tracking-widest mb-2">Completion Date *</label>
@@ -699,15 +692,22 @@ export default function MaintenanceTracker({ companyId }) {
         </div>
       )}
 
-      {/* 🚀 NEW: HISTORY LEDGER MODAL */}
+      {/* 🚀 NEW: HISTORY LEDGER MODAL (PRINT READY) */}
       {historyTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-gray-900">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border-2 border-indigo-500 flex flex-col max-h-[80vh]">
+        <div className="fixed inset-0 bg-black/80 z-9999 flex items-center justify-center p-4 animate-fade-in text-gray-900">
+          <div ref={historyModalRef} className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden border-2 border-indigo-500 flex flex-col max-h-[80vh] print:max-h-none print:border-none print:shadow-none">
+        
             <div className="bg-indigo-600 p-4 flex justify-between items-center shrink-0">
               <h3 className="text-white font-black tracking-widest uppercase text-sm">
                 Historical Ledger
               </h3>
-              <button onClick={() => setHistoryTarget(null)} className="text-indigo-200 hover:text-white font-bold text-xl leading-none">✕</button>
+              
+              <div className="flex items-center gap-4 print:hidden">
+                <button onClick={downloadHistoryPDF} className="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-1">
+                  <span>📄</span> Save PDF
+                </button>
+                <button onClick={() => setHistoryTarget(null)} className="text-indigo-200 hover:text-white font-bold text-xl leading-none">✕</button>
+              </div>
             </div>
             
             <div className="p-4 bg-indigo-50 border-b border-indigo-100 shrink-0">
@@ -715,7 +715,7 @@ export default function MaintenanceTracker({ companyId }) {
               <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">{selectedVehicle?.fleet_number}</p>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 bg-white">
+            <div className="flex-1 overflow-y-auto p-6 bg-white print:overflow-visible print:h-auto">
               {isLoadingHistory ? (
                 <p className="text-center text-gray-400 italic font-bold animate-pulse">Pulling secure ledger...</p>
               ) : taskHistoryLogs.length === 0 ? (
@@ -723,7 +723,7 @@ export default function MaintenanceTracker({ companyId }) {
               ) : (
                 <div className="space-y-4">
                   {taskHistoryLogs.map((log, index) => (
-                    <div key={log.id || index} className="flex justify-between items-center p-4 rounded-lg border border-gray-200 shadow-sm bg-gray-50 hover:bg-indigo-50 transition-colors">
+                    <div key={log.id || index} className="flex justify-between items-center p-4 rounded-lg border border-gray-200 shadow-sm bg-gray-50 hover:bg-indigo-50 transition-colors print:border-gray-300">
                       <div>
                         <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
                           Logged On: {new Date(log.created_at).toLocaleDateString('en-ZA')}
@@ -747,7 +747,7 @@ export default function MaintenanceTracker({ companyId }) {
               )}
             </div>
             
-            <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end shrink-0">
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end shrink-0 print:hidden">
               <button onClick={() => setHistoryTarget(null)} className="px-6 py-2 bg-gray-800 hover:bg-gray-900 text-white font-black text-sm rounded shadow-md transition-colors active:scale-95 uppercase tracking-widest">
                 Close Ledger
               </button>
